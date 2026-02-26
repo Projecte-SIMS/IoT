@@ -235,7 +235,43 @@ async def device_ws(websocket: WebSocket, device_id: str):
             data = await websocket.receive_json()
             typ = data.get("type")
             if typ == "status":
-                await db.devices.update_one({"_id": ObjectId(real_id)}, {"$set": {"meta": data.get("meta", {})}})
+                meta = data.get("meta", {})
+                # 1. Actualizar la colección de dispositivos (para el dashboard)
+                await db.devices.update_one({"_id": ObjectId(real_id)}, {"$set": {"meta": meta}})
+                
+                # 2. Sincronizar con vehicle_locations para la base de datos externa
+                # Obtenemos la matrícula actual del dispositivo
+                current_dev = await db.devices.find_one({"_id": ObjectId(real_id)})
+                plate = current_dev.get("license_plate") or current_dev.get("vehicle_id")
+                
+                if plate:
+                    sensors = meta.get("sensors", {})
+                    gps = sensors.get("gps", {})
+                    relays = meta.get("relays", {})
+                    
+                    # El vehículo está 'active' si el Relay 0 está ON
+                    is_active = relays.get("0", False)
+                    
+                    location_doc = {
+                        "license_plate": plate,
+                        "latitude": gps.get("lat", 0.0),
+                        "longitude": gps.get("lon", 0.0),
+                        "speed": gps.get("speed", 0.0),
+                        "engine_temp": sensors.get("engine", {}).get("temp", 0.0),
+                        "rpm": sensors.get("engine", {}).get("rpm", 0),
+                        "battery_voltage": sensors.get("battery", 0.0),
+                        "active": is_active,
+                        "last_update": asyncio.get_event_loop().time()
+                    }
+                    
+                    # Upsert en vehicle_locations usando license_plate como clave
+                    await db.vehicle_locations.update_one(
+                        {"license_plate": plate},
+                        {"$set": location_doc},
+                        upsert=True
+                    )
+                    logging.debug(f"Sincronizado vehicle_locations para {plate}")
+
             elif typ == "ack":
                 await db.commands.update_one({"device_id": real_id, "status": "sent"}, {"$set": {"status": "ack"}})
     except WebSocketDisconnect:

@@ -76,16 +76,41 @@ function renderDevices() {
             const metaDiv = document.createElement('div');
             metaDiv.className = 'meta-info';
             
-            let metaHtml = '<strong>Estado:</strong><br>';
+            let metaHtml = `
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #cbd5e1; padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+                    <span style="font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.7rem;">Hardware</span>
+                    <div style="display: flex; gap: 0.5rem;">`;
+            
             if (device.meta.relays) {
-                const relays = device.meta.relays;
-                Object.keys(relays).forEach(r => {
-                    const state = relays[r] ? 'ENCENDIDO' : 'APAGADO';
-                    const color = relays[r] ? 'var(--success)' : 'var(--text-muted)';
-                    metaHtml += `<span style="color: ${color}">● Relay ${r}: ${state}</span><br>`;
+                Object.keys(device.meta.relays).forEach(r => {
+                    const active = device.meta.relays[r];
+                    metaHtml += `<span title="Relay ${r}" style="width: 12px; height: 12px; border-radius: 50%; background: ${active ? 'var(--success)' : '#cbd5e1'}; display: inline-block;"></span>`;
                 });
-            } else {
-                metaHtml += JSON.stringify(device.meta).replace(/[{}"]/g, '').replace(/,/g, ', ');
+            }
+            metaHtml += `</div></div>`;
+
+            if (device.meta.sensors) {
+                const s = device.meta.sensors;
+                metaHtml += `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1rem;">
+                        <div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.025em;">UBICACIÓN</div>
+                            <div style="font-family: 'Courier New', monospace; font-size: 0.7rem; color: var(--text);">${s.gps.lat.toFixed(4)}, ${s.gps.lon.toFixed(4)}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.025em;">VELOCIDAD</div>
+                            <div style="font-family: 'Courier New', monospace; font-size: 0.7rem; color: var(--text);">${s.gps.speed.toFixed(1)} km/h</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.025em;">MOTOR</div>
+                            <div style="font-family: 'Courier New', monospace; font-size: 0.7rem; color: var(--text);">${s.engine.temp.toFixed(0)}°C | ${s.engine.rpm}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.025em;">BATERÍA</div>
+                            <div style="font-family: 'Courier New', monospace; font-size: 0.7rem; color: var(--text);">${s.battery.toFixed(1)}V</div>
+                        </div>
+                    </div>
+                `;
             }
             
             metaDiv.innerHTML = metaHtml;
