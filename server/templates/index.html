@@ -3,24 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Raspberry Manager Dashboard</title>
+  <title>IoT Fleet Manager</title>
   <script src="/static/app.js" defer></script>
   <style>
     :root {
-      --primary: #2563eb;
-      --primary-hover: #1d4ed8;
-      --success: #059669;
-      --danger: #dc2626;
-      --warning: #d97706;
-      --bg: #f8fafc;
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --bg: #f3f4f6;
       --card-bg: #ffffff;
-      --text: #1e293b;
-      --text-muted: #64748b;
-      --border: #e2e8f0;
+      --text: #111827;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --radius: 12px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
     body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
       margin: 0;
       padding: 0;
       background-color: var(--bg);
@@ -29,258 +31,311 @@
     }
 
     .container {
-      max-width: 1000px;
-      margin: 2rem auto;
-      padding: 0 1rem;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
     }
 
+    /* Header & Navigation */
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 2rem;
+      margin-bottom: 2.5rem;
+      background: white;
+      padding: 1.25rem 2rem;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
     }
 
-    h1 {
+    .logo-area h1 {
       margin: 0;
-      font-size: 1.875rem;
-      font-weight: 700;
+      font-size: 1.5rem;
+      font-weight: 800;
       color: var(--primary);
-    }
-
-    .status-badge {
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      font-size: 0.875rem;
-      font-weight: 600;
-      display: inline-flex;
+      letter-spacing: -0.025em;
+      display: flex;
       align-items: center;
+      gap: 0.5rem;
     }
 
-    .status-online { background: #dcfce7; color: #166534; }
-    .status-offline { background: #fee2e2; color: #991b1b; }
+    /* Status Pulse Animation */
+    .pulse {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--success);
+      cursor: pointer;
+      box-shadow: 0 0 0 rgba(16, 185, 129, 0.4);
+      animation: pulse 2s infinite;
+    }
 
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    /* Forms & Inputs */
     .card {
       background: var(--card-bg);
-      border-radius: 0.75rem;
+      border-radius: var(--radius);
       border: 1px solid var(--border);
-      box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
-      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow);
       padding: 1.5rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .registration-section {
+      margin-bottom: 2.5rem;
+      background: linear-gradient(to right, #ffffff, #f9fafb);
     }
 
     .form-group {
-      display: flex;
-      gap: 0.75rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 1rem;
       margin-top: 1rem;
     }
 
     input {
-      padding: 0.5rem 0.75rem;
+      padding: 0.75rem 1rem;
       border: 1px solid var(--border);
-      border-radius: 0.375rem;
-      flex: 1;
-      font-size: 0.875rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      transition: border-color 0.2s, ring 0.2s;
+      outline: none;
     }
 
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+
+    /* Buttons */
     button {
       background: var(--primary);
       color: white;
       border: none;
-      padding: 0.5rem 1rem;
-      border-radius: 0.375rem;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all 0.2s;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 0.5rem;
     }
 
-    button:hover { background: var(--primary-hover); }
-    button.secondary { background: var(--text-muted); }
-    button.danger { background: var(--danger); }
+    button:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    button:active { transform: translateY(0); }
+
+    button.secondary { background: #f3f4f6; color: #374151; border: 1px solid var(--border); }
+    button.secondary:hover { background: #e5e7eb; }
+    button.danger { background: #fee2e2; color: #dc2626; }
+    button.danger:hover { background: #fecaca; }
     button.success { background: var(--success); }
 
+    /* Device Grid */
     .device-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
       gap: 1.5rem;
     }
 
-    .device-card {
-      position: relative;
+    .device-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     }
 
-    .device-header {
+    .card-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 1rem;
+      margin-bottom: 1.25rem;
     }
 
-    .device-info h3 { margin: 0; font-size: 1.125rem; }
-    .device-info p { margin: 0.25rem 0; color: var(--text-muted); font-size: 0.875rem; }
-
-    .device-actions {
-      display: flex;
-      gap: 0.5rem;
-      margin-top: auto; /* Empuja los botones al final de la tarjeta */
-      padding-top: 1rem;
-      border-top: 1px solid var(--border);
-      align-items: center;
-    }
-
-    .device-actions button {
-      padding: 0.4rem 0.75rem;
+    .status-badge {
+      padding: 0.35rem 0.75rem;
+      border-radius: 20px;
       font-size: 0.75rem;
-      white-space: nowrap;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
     }
 
-    .btn-icon-only {
-        padding: 0.4rem 0.5rem !important;
-        background: transparent !important;
-        color: var(--text-muted) !important;
-        border: 1px solid var(--border) !important;
+    .status-online { background: #ecfdf5; color: #059669; border: 1px solid #10b98133; }
+    .status-offline { background: #fef2f2; color: #dc2626; border: 1px solid #ef444433; }
+
+    /* Telemetry Display */
+    .telemetry-box {
+      background: #f8fafc;
+      border-radius: 10px;
+      padding: 1rem;
+      margin: 1rem 0;
     }
 
-    .btn-icon-only:hover {
-        background: var(--border) !important;
-        color: var(--text) !important;
+    .sensor-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
     }
 
-    .meta-info {
-      font-size: 0.8125rem;
-      background: #f1f5f9;
-      padding: 0.75rem;
-      border-radius: 0.5rem;
-      margin-top: 0.75rem;
-      border: 1px solid var(--border);
+    .sensor-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .sensor-value {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      font-weight: 600;
       color: var(--text);
     }
 
-    .msg-container {
+    /* Modal Styling */
+    .modal-overlay {
+      display: none;
       position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      z-index: 50;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(17, 24, 39, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      animation: fadeIn 0.2s ease-out;
     }
 
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .modal-content {
+      background: white;
+      width: 90%;
+      max-width: 450px;
+      padding: 2rem;
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Toast Notifications */
     .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
       padding: 1rem 1.5rem;
-      border-radius: 0.5rem;
+      background: var(--text);
       color: white;
-      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-      margin-bottom: 0.5rem;
-      animation: slideIn 0.3s ease-out;
+      border-radius: 10px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 500;
+      animation: slideUp 0.3s ease-out;
     }
 
-    @keyframes slideIn {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-
-    .controls {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-    }
-
-    .auto-refresh-toggle {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 0.875rem;
-        color: var(--text-muted);
-    }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>Raspberry Manager</h1>
-      <div class="controls">
-        <label class="auto-refresh-toggle">
-            <input type="checkbox" id="autoRefresh" checked> Auto-actualizar
+      <div class="logo-area">
+        <h1><span>🚙</span> IoT Fleet Manager</h1>
+      </div>
+      <div style="display: flex; align-items: center; gap: 1.5rem;">
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer;">
+          <input type="checkbox" id="autoRefresh" checked style="width: 1.2rem; height: 1.2rem; cursor: pointer;">
+          <span style="font-weight: 500;">Live Feed</span>
         </label>
-        <button id="refresh" class="secondary">
-          <span>🔄</span> Actualizar ahora
+        <button id="refresh" class="secondary" style="padding: 0.5rem 1rem;">
+          <span>🔄</span> Refresh
         </button>
       </div>
     </header>
 
-    <section class="card">
-      <h2>Registrar nuevo dispositivo</h2>
+    <section class="card registration-section">
+      <h2 style="margin: 0; font-size: 1.1rem;">Registrar Nuevo Vehículo</h2>
       <div class="form-group">
-        <input id="name" placeholder="Nombre del dispositivo (ej. Nodo Sur)" />
-        <input id="vehicle" placeholder="ID de Vehículo (opcional)" />
-        <button id="create" class="success">
-          <span>+</span> Crear dispositivo
+        <input id="name" placeholder="Alias (ej. Reparto Sur)" />
+        <input id="vehicle" placeholder="Matrícula (ej. 1234-ABC)" />
+        <button id="create">
+          <span>+</span> Registrar
         </button>
       </div>
     </section>
 
     <section>
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h2 style="margin: 0;">Dispositivos Activos</h2>
-        <span id="deviceCount" style="color: var(--text-muted); font-weight: 600;">0 dispositivos</span>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 style="margin: 0; font-size: 1.25rem;">Flota Activa</h2>
+        <span id="deviceCount" style="background: #e5e7eb; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 700; color: #4b5563;">
+          0 Dispositivos
+        </span>
       </div>
       <div id="devices" class="device-grid">
-        <!-- Devices will be injected here -->
+        <!-- Cargando... -->
       </div>
     </section>
   </div>
 
-  <div id="msg-container" class="msg-container"></div>
-
-      <template id="deviceTemplate">
-      <div class="card device-card" style="display: flex; flex-direction: column; height: 100%;">
-        <div class="device-header">
-          <div class="device-info">
-            <h3 class="device-name" style="color: var(--primary); margin-bottom: 0.25rem;"></h3>
-            <span class="status-badge"></span>
-          </div>
+  <!-- Modal de Edición -->
+  <div id="editModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2 style="margin: 0 0 1.5rem 0; font-size: 1.5rem;">Configurar Vehículo</h2>
+      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-muted);">NOMBRE DEL DISPOSITIVO</label>
+          <input id="editName" type="text" style="width: 100%; box-sizing: border-box;">
         </div>
-
-        <div style="margin-bottom: 1rem;">
-            <p class="device-id" style="font-size: 0.75rem; font-family: monospace; background: #eee; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-bottom: 0.5rem;"></p>
-            <p class="vehicle-id" style="font-weight: 600; color: var(--text);"></p>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-muted);">MATRÍCULA ASOCIADA</label>
+          <input id="editVehicle" type="text" style="width: 100%; box-sizing: border-box;">
         </div>
-
-        <div class="meta-container" style="flex-grow: 1;">
-            <!-- Aquí se inyectarán los sensores y relays -->
-        </div>
-
-        <div class="device-actions">
-          <button class="btn-on success">ON</button>
-          <button class="btn-off danger">OFF</button>
-          <div style="flex-grow: 1;"></div>
-          <button class="btn-edit btn-icon-only" title="Editar">✏️</button>
-          <button class="btn-delete btn-icon-only" title="Eliminar">🗑️</button>
-        </div>
-      </div>
-    </template>
-  
-    <!-- Modal para editar -->
-    <div id="editModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:100; justify-content:center; align-items:center;">
-      <div class="card" style="width:400px; margin:0;">
-        <h2 style="margin-top:0;">Editar Dispositivo</h2>
-        <div style="display:flex; flex-direction:column; gap:1rem;">
-          <div>
-            <label style="display:block; font-size:0.875rem; margin-bottom:0.25rem;">Nombre:</label>
-            <input id="editName" type="text" style="width:100%; box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="display:block; font-size:0.875rem; margin-bottom:0.25rem;">ID Vehículo:</label>
-            <input id="editVehicle" type="text" style="width:100%; box-sizing:border-box;">
-          </div>
-          <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
-            <button id="cancelEdit" class="secondary">Cancelar</button>
-            <button id="saveEdit" class="success">Guardar Cambios</button>
-          </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;">
+          <button id="cancelEdit" class="secondary">Cancelar</button>
+          <button id="saveEdit">Guardar Cambios</button>
         </div>
       </div>
     </div>
-  </body>
-  
+  </div>
+
+  <div id="msg-container"></div>
+
+  <template id="deviceTemplate">
+    <div class="card device-card" style="display: flex; flex-direction: column;">
+      <div class="card-header">
+        <div style="display: flex; flex-direction: column;">
+          <h3 class="device-name" style="margin: 0; font-size: 1.15rem; font-weight: 700;"></h3>
+          <span class="device-id" style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace;"></span>
+        </div>
+        <span class="status-badge"></span>
+      </div>
+
+      <div style="margin-bottom: 1rem;">
+        <div style="font-size: 0.65rem; font-weight: 700; color: var(--primary); margin-bottom: 0.25rem;">MATRÍCULA</div>
+        <div class="vehicle-id" style="font-size: 1rem; font-weight: 700; color: var(--text);"></div>
+      </div>
+
+      <div class="meta-container" style="flex-grow: 1;">
+        <!-- Telemetría Dinámica -->
+      </div>
+
+      <div class="device-actions" style="display: flex; gap: 0.75rem; margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1.25rem;">
+        <button class="btn-on success" style="flex: 1; padding: 0.6rem;">ON</button>
+        <button class="btn-off danger" style="flex: 1; padding: 0.6rem;">OFF</button>
+        <button class="btn-edit secondary" title="Editar" style="padding: 0.6rem;">✏️</button>
+        <button class="btn-delete secondary" title="Eliminar" style="padding: 0.6rem;">🗑️</button>
+      </div>
+    </div>
+  </template>
+</body>
 </html>

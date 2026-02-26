@@ -50,10 +50,11 @@ function renderDevices() {
     
     if (devices.length === 0) {
         devicesContainer.innerHTML = `
-            <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 3rem; background: white; border-radius: 1rem; border: 2px dashed var(--border);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">📡</div>
-                <p>Esperando conexión del primer dispositivo...</p>
-                <small>Inicia un agente en tu Raspberry para verlo aquí automáticamente.</small>
+            <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 4rem 2rem; background: white; border-radius: 1rem; border: 2px dashed #cbd5e1; display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+                <div style="font-size: 4rem; animation: float 3s ease-in-out infinite;">📡</div>
+                <h3 style="margin: 0; color: var(--text);">Esperando Señal...</h3>
+                <p style="margin: 0; max-width: 300px;">Inicia un agente en tu Raspberry para comenzar el monitoreo de flota en tiempo real.</p>
+                <style>@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }</style>
             </div>
         `;
         return;
@@ -64,27 +65,29 @@ function renderDevices() {
         
         // Fill data
         clone.querySelector('.device-name').textContent = device.name;
-        clone.querySelector('.device-id').textContent = `ID: ${device.id}`;
-        clone.querySelector('.vehicle-id').textContent = device.vehicle_id ? `Vehículo: ${device.vehicle_id}` : 'Sin vehículo asignado';
+        clone.querySelector('.device-id').textContent = `HW-ID: ${device.hardware_id || device.id}`;
+        
+        const plate = device.license_plate || device.vehicle_id || 'SIN ASIGNAR';
+        clone.querySelector('.vehicle-id').textContent = plate;
         
         const badge = clone.querySelector('.status-badge');
-        badge.textContent = device.online ? 'ONLINE' : 'OFFLINE';
-        badge.classList.add(device.online ? 'status-online' : 'status-offline');
+        badge.textContent = device.online ? 'Activo' : 'Desconectado';
+        badge.className = `status-badge ${device.online ? 'status-online' : 'status-offline'}`;
 
         // Meta info (if available)
         if (device.meta && Object.keys(device.meta).length > 0) {
             const metaDiv = document.createElement('div');
-            metaDiv.className = 'meta-info';
+            metaDiv.className = 'telemetry-box';
             
             let metaHtml = `
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #cbd5e1; padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
-                    <span style="font-weight: 700; color: var(--text-muted); text-transform: uppercase; font-size: 0.7rem;">Hardware</span>
-                    <div style="display: flex; gap: 0.5rem;">`;
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <span style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Módulos Hardware</span>
+                    <div style="display: flex; gap: 0.4rem;">`;
             
             if (device.meta.relays) {
                 Object.keys(device.meta.relays).forEach(r => {
                     const active = device.meta.relays[r];
-                    metaHtml += `<span title="Relay ${r}" style="width: 12px; height: 12px; border-radius: 50%; background: ${active ? 'var(--success)' : '#cbd5e1'}; display: inline-block;"></span>`;
+                    metaHtml += `<div class="${active ? 'pulse' : ''}" title="Relay ${r}" style="width: 10px; height: 10px; border-radius: 50%; background: ${active ? 'var(--success)' : '#cbd5e1'};"></div>`;
                 });
             }
             metaHtml += `</div></div>`;
@@ -92,22 +95,22 @@ function renderDevices() {
             if (device.meta.sensors) {
                 const s = device.meta.sensors;
                 metaHtml += `
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1rem;">
-                        <div>
-                            <div style="font-size: 0.6rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.025em;">UBICACIÓN</div>
-                            <div style="font-family: 'Courier New', monospace; font-size: 0.7rem; color: var(--text);">${s.gps.lat.toFixed(4)}, ${s.gps.lon.toFixed(4)}</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="sensor-item">
+                            <span class="sensor-label">📍 UBICACIÓN</span>
+                            <span class="sensor-value">${s.gps.lat.toFixed(4)}, ${s.gps.lon.toFixed(4)}</span>
                         </div>
-                        <div>
-                            <div style="font-size: 0.6rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.025em;">VELOCIDAD</div>
-                            <div style="font-family: 'Courier New', monospace; font-size: 0.7rem; color: var(--text);">${s.gps.speed.toFixed(1)} km/h</div>
+                        <div class="sensor-item">
+                            <span class="sensor-label">🏁 VELOCIDAD</span>
+                            <span class="sensor-value">${s.gps.speed.toFixed(1)} km/h</span>
                         </div>
-                        <div>
-                            <div style="font-size: 0.6rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.025em;">MOTOR</div>
-                            <div style="font-family: 'Courier New', monospace; font-size: 0.7rem; color: var(--text);">${s.engine.temp.toFixed(0)}°C | ${s.engine.rpm}</div>
+                        <div class="sensor-item">
+                            <span class="sensor-label">⚙️ MOTOR</span>
+                            <span class="sensor-value">${s.engine.temp.toFixed(0)}°C | ${s.engine.rpm}</span>
                         </div>
-                        <div>
-                            <div style="font-size: 0.6rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.025em;">BATERÍA</div>
-                            <div style="font-family: 'Courier New', monospace; font-size: 0.7rem; color: var(--text);">${s.battery.toFixed(1)}V</div>
+                        <div class="sensor-item">
+                            <span class="sensor-label">🔋 BATERÍA</span>
+                            <span class="sensor-value">${s.battery.toFixed(1)}V</span>
                         </div>
                     </div>
                 `;

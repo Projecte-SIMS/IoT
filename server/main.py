@@ -65,7 +65,8 @@ manager = ConnectionManager()
 # Pydantic models
 class DeviceCreate(BaseModel):
     name: str
-    vehicle_id: str | None = None
+    hardware_id: str | None = None
+    license_plate: str | None = Field(None, alias="vehicle_id") # Mapeo de vehicle_id a license_plate
     meta: dict = Field(default_factory=dict)
 
 class DeviceOut(DeviceCreate):
@@ -201,20 +202,17 @@ async def send_command(cmd: CommandCreate, x_api_key: str = Header(None)):
 # WebSocket for agents
 @app.websocket("/ws/{device_id}")
 async def device_ws(websocket: WebSocket, device_id: str):
-    logging.info(f"Intento de conexión desde: {device_id}")
+    logging.info(f"Intento de conexión desde hardware: {device_id}")
     
-    # Intentar buscar por ID o por Nombre
-    query = {"$or": [{"name": device_id}]}
-    if ObjectId.is_valid(device_id):
-        query["$or"].append({"_id": ObjectId(device_id)})
-    
-    device = await db.devices.find_one(query)
+    # Buscamos por el ID de hardware inmutable
+    device = await db.devices.find_one({"hardware_id": device_id})
 
     if not device:
-        logging.info(f"No se encontró el dispositivo {device_id}. Creando uno nuevo...")
+        logging.info(f"Nuevo hardware detectado {device_id}. Creando registro...")
         new_doc = {
+            "hardware_id": device_id,
             "name": device_id, 
-            "vehicle_id": "AUTO-" + device_id[:4], 
+            "license_plate": "AUTO-" + device_id[-4:], 
             "online": True,
             "meta": {"status": "initialized"}
         }
@@ -222,7 +220,7 @@ async def device_ws(websocket: WebSocket, device_id: str):
         real_id = str(res.inserted_id)
     else:
         real_id = str(device["_id"])
-        logging.info(f"Dispositivo encontrado: {device['name']} con ID {real_id}")
+        logging.info(f"Hardware reconocido: {device['name']} (ID: {real_id})")
 
     # Aceptar conexión ANTES de marcar en DB para evitar bloqueos
     await manager.connect(real_id, websocket)
