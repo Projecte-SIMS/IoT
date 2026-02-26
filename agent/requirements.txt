@@ -1,2 +1,2 @@
 websockets==11.0.3
-gpiozero==1.7.1
+gpiozero==2.0.1

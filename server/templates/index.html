@@ -1,23 +1,257 @@
 <!doctype html>
-<html>
+<html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Raspberry Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raspberry Manager Dashboard</title>
   <script src="/static/app.js" defer></script>
-  <style>body{font-family:Arial;margin:20px} button{margin-left:8px}</style>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #059669;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.875rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .status-badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .status-online { background: #dcfce7; color: #166534; }
+    .status-offline { background: #fee2e2; color: #991b1b; }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 0.75rem;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+      margin-bottom: 1.5rem;
+      padding: 1.5rem;
+    }
+
+    .form-group {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    input {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 0.375rem;
+      flex: 1;
+      font-size: 0.875rem;
+    }
+
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    button:hover { background: var(--primary-hover); }
+    button.secondary { background: var(--text-muted); }
+    button.danger { background: var(--danger); }
+    button.success { background: var(--success); }
+
+    .device-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .device-card {
+      position: relative;
+    }
+
+    .device-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+    }
+
+    .device-info h3 { margin: 0; font-size: 1.125rem; }
+    .device-info p { margin: 0.25rem 0; color: var(--text-muted); font-size: 0.875rem; }
+
+    .device-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .meta-info {
+      font-size: 0.75rem;
+      background: #f1f5f9;
+      padding: 0.5rem;
+      border-radius: 0.375rem;
+      margin-top: 0.5rem;
+    }
+
+    .msg-container {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 50;
+    }
+
+    .toast {
+      padding: 1rem 1.5rem;
+      border-radius: 0.5rem;
+      color: white;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+      margin-bottom: 0.5rem;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .controls {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .auto-refresh-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: var(--text-muted);
+    }
+  </style>
 </head>
 <body>
-  <h1>Raspberry Manager</h1>
-  <section>
-    <h2>Create device</h2>
-    <input id="name" placeholder="Device name" />
-    <input id="vehicle" placeholder="Vehicle id (optional)" />
-    <button id="create">Create</button>
-  </section>
-  <section>
-    <h2>Devices</h2>
-    <button id="refresh">Refresh</button>
-    <ul id="devices"></ul>
-  </section>
-</body>
+  <div class="container">
+    <header>
+      <h1>Raspberry Manager</h1>
+      <div class="controls">
+        <label class="auto-refresh-toggle">
+            <input type="checkbox" id="autoRefresh" checked> Auto-actualizar
+        </label>
+        <button id="refresh" class="secondary">
+          <span>🔄</span> Actualizar ahora
+        </button>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>Registrar nuevo dispositivo</h2>
+      <div class="form-group">
+        <input id="name" placeholder="Nombre del dispositivo (ej. Nodo Sur)" />
+        <input id="vehicle" placeholder="ID de Vehículo (opcional)" />
+        <button id="create" class="success">
+          <span>+</span> Crear dispositivo
+        </button>
+      </div>
+    </section>
+
+    <section>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="margin: 0;">Dispositivos Activos</h2>
+        <span id="deviceCount" style="color: var(--text-muted); font-weight: 600;">0 dispositivos</span>
+      </div>
+      <div id="devices" class="device-grid">
+        <!-- Devices will be injected here -->
+      </div>
+    </section>
+  </div>
+
+  <div id="msg-container" class="msg-container"></div>
+
+      <template id="deviceTemplate">
+      <div class="card device-card">
+        <div class="device-header">
+          <div class="device-info">
+            <h3 class="device-name"></h3>
+            <p class="device-id"></p>
+            <p class="vehicle-id"></p>
+          </div>
+          <span class="status-badge"></span>
+        </div>
+        <div class="meta-container"></div>
+        <div class="device-actions">
+          <button class="btn-on success">ENCENDER</button>
+          <button class="btn-off danger">APAGAR</button>
+          <button class="btn-edit secondary" title="Editar">✏️</button>
+          <button class="btn-delete secondary" title="Eliminar">🗑️</button>
+        </div>
+      </div>
+    </template>
+  
+    <!-- Modal para editar -->
+    <div id="editModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:100; justify-content:center; align-items:center;">
+      <div class="card" style="width:400px; margin:0;">
+        <h2 style="margin-top:0;">Editar Dispositivo</h2>
+        <div style="display:flex; flex-direction:column; gap:1rem;">
+          <div>
+            <label style="display:block; font-size:0.875rem; margin-bottom:0.25rem;">Nombre:</label>
+            <input id="editName" type="text" style="width:100%; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block; font-size:0.875rem; margin-bottom:0.25rem;">ID Vehículo:</label>
+            <input id="editVehicle" type="text" style="width:100%; box-sizing:border-box;">
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+            <button id="cancelEdit" class="secondary">Cancelar</button>
+            <button id="saveEdit" class="success">Guardar Cambios</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+  
 </html>

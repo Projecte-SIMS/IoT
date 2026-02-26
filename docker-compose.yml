@@ -1,25 +1,26 @@
 version: '3.8'
 services:
-  mongo:
-    image: mongo:6
-    container_name: mongo
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-
-  api:
+  server:
     build: ./server
-    container_name: raspi_api
-    restart: unless-stopped
+    container_name: fastapi-server
+    restart: always
+    env_file:
+      - server/.env
     ports:
-      - "8000:8000"
-    environment:
-      - MONGO_URI=mongodb://mongo:27017
-      - DB_NAME=raspi_db
-    depends_on:
-      - mongo
+      - "8001:8000"
+    volumes:
+      - ./server:/app
+
+  # El servicio de Mongo no estaba definido en el compose pero se usaba en la URI
+  # Si usas MongoDB Atlas (la nube), no necesitas este servicio.
+  # Si quieres mongo local, descomenta esto:
+  # mongo:
+  #   image: mongo:latest
+  #   container_name: mongodb
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongo_data:/data/db
 
 volumes:
   mongo_data:

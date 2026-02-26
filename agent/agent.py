@@ -1,22 +1,11 @@
 #!/usr/bin/env python3
-"""
-Simple Raspberry agent that connects to FastAPI WebSocket at /ws/{device_id}.
-Environment variables:
- - DEVICE_ID: unique id for this device (required)
- - SERVER_WS: base websocket URL, e.g. ws://your.server:8000 (default: ws://localhost:8000)
- - RELAY0_PIN: GPIO pin number for relay 0 (default: 17)
-
-This agent sends periodic status updates and listens for commands of the shape:
-{ "type": "command", "payload": { "action": "on"|"off", "relay": 0 } }
-
-When a command is executed the agent sends an ack:
-{ "type": "ack", "payload": { "relay": 0, "state": true } }
-"""
 import os
 import json
 import asyncio
 import logging
+import uuid
 
+# Intentar importar librerías de hardware
 try:
     import gpiozero
     OutputDevice = gpiozero.OutputDevice
@@ -28,90 +17,110 @@ try:
 except Exception:
     websockets = None
 
+def get_unique_id():
+    """Genera un ID único basado en el hardware (CPU Serial o MAC)"""
+    try:
+        with open('/proc/cpuinfo', 'r') as f:
+            for line in f:
+                if line.startswith('Serial'):
+                    return f"raspi-{line.split(':')[1].strip()}"
+    except:
+        pass
+    
+    # Fallback a MAC si no es una Raspberry Pi
+    mac = uuid.getnode()
+    return f"device-{hex(mac)[2:]}"
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
+# CARGA DE CONFIGURACIÓN (Solo desde entorno)
+# Si DEVICE_ID no existe, se genera uno automático
 DEVICE_ID = os.getenv("DEVICE_ID")
 if not DEVICE_ID:
-    raise SystemExit("DEVICE_ID environment variable is required")
+    DEVICE_ID = get_unique_id()
+    logging.info(f"Identidad automática generada: {DEVICE_ID}")
+else:
+    logging.info(f"Identidad manual detectada: {DEVICE_ID}")
 
-SERVER_WS = os.getenv("SERVER_WS", "ws://localhost:8000")
+# El servidor debe venir del .env, si no, usamos el estándar de Docker/Local
+SERVER_WS = os.getenv("SERVER_WS", "ws://localhost:8001")
+# El PIN debe ser configurable, por defecto el 17
 RELAY0_PIN = int(os.getenv("RELAY0_PIN", "17"))
 
-# setup relay(s)
+# Configuración de Relés
 RELAYS = {}
 if OutputDevice:
-    RELAYS[0] = OutputDevice(RELAY0_PIN, active_high=True, initial_value=False)
+    try:
+        RELAYS[0] = OutputDevice(RELAY0_PIN, active_high=True, initial_value=False)
+    except Exception as e:
+        logging.error(f"Error inicializando GPIO {RELAY0_PIN}: {e}")
 else:
     class MockRelay:
-        def __init__(self):
-            self._v = False
-        def on(self):
-            self._v = True
-        def off(self):
-            self._v = False
-        def is_active(self):
-            return self._v
+        def __init__(self): self._v = False
+        def on(self): self._v = True; logging.info("Mock Relay ON")
+        def off(self): self._v = False; logging.info("Mock Relay OFF")
+        def is_active(self): return self._v
     RELAYS[0] = MockRelay()
+    logging.info("Usando MockRelay (No se detectó hardware GPIO)")
 
 async def send_status(ws):
+    """Bucle de envío de telemetría"""
     try:
         while True:
-            payload = {"type": "status", "meta": {"relays": {str(k): RELAYS[k].is_active() for k in RELAYS}}}
+            payload = {
+                "type": "status", 
+                "meta": {
+                    "device_name": DEVICE_ID,
+                    "relays": {str(k): RELAYS[k].is_active() for k in RELAYS}
+                }
+            }
             await ws.send(json.dumps(payload))
             await asyncio.sleep(10)
-    except asyncio.CancelledError:
-        raise
     except Exception as e:
-        logging.debug("status sender stopped: %s", e)
+        logging.debug(f"Status sender error: {e}")
 
 async def handle_messages(ws):
+    """Bucle de escucha de comandos"""
     async for message in ws:
         try:
             data = json.loads(message)
-        except Exception:
-            logging.warning("invalid message: %s", message)
-            continue
-        typ = data.get("type")
-        if typ == "command":
-            payload = data.get("payload", {})
-            action = payload.get("action")
-            relay = int(payload.get("relay", 0))
-            logging.info("cmd for relay %s: %s", relay, action)
-            r = RELAYS.get(relay)
-            if not r:
-                logging.warning("unknown relay %s", relay)
-                continue
-            if action == "on":
-                r.on()
-            elif action == "off":
-                r.off()
-            # ack
-            ack = {"type": "ack", "payload": {"relay": relay, "state": r.is_active()}}
-            await ws.send(json.dumps(ack))
-        else:
-            logging.debug("unhandled type: %s", typ)
+            if data.get("type") == "command":
+                payload = data.get("payload", {})
+                action = payload.get("action")
+                relay_idx = int(payload.get("relay", 0))
+                
+                r = RELAYS.get(relay_idx)
+                if r:
+                    if action == "on": r.on()
+                    elif action == "off": r.off()
+                    
+                    # Respuesta de confirmación
+                    ack = {"type": "ack", "payload": {"relay": relay_idx, "state": r.is_active()}}
+                    await ws.send(json.dumps(ack))
+        except Exception as e:
+            logging.warning(f"Error procesando mensaje: {e}")
 
 async def run():
     if not websockets:
-        raise SystemExit("websockets package required; install with 'pip install websockets'")
+        logging.error("Librería 'websockets' no instalada.")
+        return
+
     uri = f"{SERVER_WS}/ws/{DEVICE_ID}"
     while True:
         try:
-            logging.info("connecting to %s", uri)
+            logging.info(f"Conectando a {uri}...")
             async with websockets.connect(uri, ping_interval=20, ping_timeout=10) as ws:
-                # send initial status
-                await ws.send(json.dumps({"type": "status", "meta": {"startup": True}}))
-                sender = asyncio.create_task(send_status(ws))
-                handler = asyncio.create_task(handle_messages(ws))
-                done, pending = await asyncio.wait([sender, handler], return_when=asyncio.FIRST_EXCEPTION)
-                for p in pending:
-                    p.cancel()
+                # Enviar saludo inicial
+                await ws.send(json.dumps({"type": "status", "meta": {"event": "online"}}))
+                
+                # Ejecutar emisor y receptor en paralelo
+                await asyncio.gather(send_status(ws), handle_messages(ws))
         except Exception as e:
-            logging.warning("connection failed: %s", e)
+            logging.warning(f"Conexión perdida: {e}. Reintentando en 5s...")
             await asyncio.sleep(5)
 
 if __name__ == '__main__':
     try:
         asyncio.run(run())
     except KeyboardInterrupt:
-        pass
+        logging.info("Agente detenido por el usuario.")
