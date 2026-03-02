@@ -75,7 +75,7 @@ function renderDevices() {
         badge.className = `status-badge ${device.online ? 'status-online' : 'status-offline'}`;
 
         // Meta info (if available)
-        if (device.meta && Object.keys(device.meta).length > 0) {
+        if (device.telemetry || device.meta) {
             const metaDiv = document.createElement('div');
             metaDiv.className = 'telemetry-box';
             
@@ -84,7 +84,7 @@ function renderDevices() {
                     <span style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Módulos Hardware</span>
                     <div style="display: flex; gap: 0.4rem;">`;
             
-            if (device.meta.relays) {
+            if (device.meta && device.meta.relays) {
                 Object.keys(device.meta.relays).forEach(r => {
                     const active = device.meta.relays[r];
                     metaHtml += `<div class="${active ? 'pulse' : ''}" title="Relay ${r}" style="width: 10px; height: 10px; border-radius: 50%; background: ${active ? 'var(--success)' : '#cbd5e1'};"></div>`;
@@ -92,25 +92,25 @@ function renderDevices() {
             }
             metaHtml += `</div></div>`;
 
-            if (device.meta.sensors) {
-                const s = device.meta.sensors;
+            if (device.telemetry) {
+                const t = device.telemetry;
                 metaHtml += `
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                         <div class="sensor-item">
                             <span class="sensor-label">📍 UBICACIÓN</span>
-                            <span class="sensor-value">${s.gps.lat.toFixed(4)}, ${s.gps.lon.toFixed(4)}</span>
+                            <span class="sensor-value">${(t.latitude || 0).toFixed(4)}, ${(t.longitude || 0).toFixed(4)}</span>
                         </div>
                         <div class="sensor-item">
                             <span class="sensor-label">🏁 VELOCIDAD</span>
-                            <span class="sensor-value">${s.gps.speed.toFixed(1)} km/h</span>
+                            <span class="sensor-value">${(t.speed || 0).toFixed(1)} km/h</span>
                         </div>
                         <div class="sensor-item">
                             <span class="sensor-label">⚙️ MOTOR</span>
-                            <span class="sensor-value">${s.engine.temp.toFixed(0)}°C | ${s.engine.rpm}</span>
+                            <span class="sensor-value">${(t.engine_temp || 0).toFixed(0)}°C | ${t.rpm || 0} RPM</span>
                         </div>
                         <div class="sensor-item">
                             <span class="sensor-label">🔋 BATERÍA</span>
-                            <span class="sensor-value">${s.battery.toFixed(1)}V</span>
+                            <span class="sensor-value">${(t.battery_voltage || 0).toFixed(1)}V</span>
                         </div>
                     </div>
                 `;
@@ -123,6 +123,11 @@ function renderDevices() {
         // Actions
         clone.querySelector('.btn-on').onclick = () => sendCommand(device.id, 'on');
         clone.querySelector('.btn-off').onclick = () => sendCommand(device.id, 'off');
+        clone.querySelector('.btn-reboot').onclick = () => {
+            if(confirm(`¿Seguro que quieres REINICIAR el hardware de ${device.name}?`)) {
+                sendCommand(device.id, 'reboot');
+            }
+        };
         clone.querySelector('.btn-edit').onclick = () => openEditModal(device);
         clone.querySelector('.btn-delete').onclick = () => deleteDevice(device.id);
 
@@ -141,7 +146,7 @@ const editVehicleInput = document.getElementById('editVehicle');
 function openEditModal(device) {
     currentEditingId = device.id;
     editNameInput.value = device.name;
-    editVehicleInput.value = device.vehicle_id || '';
+    editVehicleInput.value = device.license_plate || '';
     editModal.style.display = 'flex';
 }
 
@@ -151,7 +156,7 @@ document.getElementById('cancelEdit').onclick = () => {
 
 document.getElementById('saveEdit').onclick = async () => {
     const name = editNameInput.value.trim();
-    const vehicle_id = editVehicleInput.value.trim() || null;
+    const license_plate = editVehicleInput.value.trim() || null;
 
     if (!name) return showToast('El nombre es obligatorio', 'error');
 
@@ -159,7 +164,7 @@ document.getElementById('saveEdit').onclick = async () => {
         const res = await fetch(`/api/devices/${currentEditingId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, vehicle_id })
+            body: JSON.stringify({ name, license_plate })
         });
 
         if (res.ok) {

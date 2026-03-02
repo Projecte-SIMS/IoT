@@ -86,15 +86,24 @@ async def device_by_id(device_id: str):
     try:
         if not ObjectId.is_valid(device_id):
             return None
-        doc = await db.devices.find_one({"_id": ObjectId(device_id)})
+        doc = await db.vehicle_locations.find_one({"_id": ObjectId(device_id)})
     except Exception:
         return None
     if not doc:
         return None
-    doc["id"] = oid_str(doc["_id"])
-    doc.pop("_id", None)
-    doc.setdefault("online", False)
-    return doc
+    
+    # Mapeo para compatibilidad con el frontend
+    flat_doc = {
+        "id": oid_str(doc["_id"]),
+        "name": doc["identity"]["name"],
+        "hardware_id": doc["identity"]["hardware_id"],
+        "license_plate": doc["identity"]["license_plate"],
+        "online": False, # Se calculará en el endpoint
+        "meta": doc.get("meta", {}),
+        "telemetry": doc.get("telemetry", {}),
+        "status": doc.get("status", {})
+    }
+    return flat_doc
 
 # Web UI
 @app.get("/", response_class=HTMLResponse)
@@ -104,27 +113,41 @@ async def index(request: Request):
 # API: devices
 @app.get("/api/ping/{device_id}")
 async def ping_device(device_id: str):
-    d = await device_by_id(device_id)
-    if not d:
-        raise HTTPException(status_code=404, detail="device not found")
     return {"online": device_id in manager.active}
 
 @app.get("/api/devices")
 async def list_devices():
     docs = []
-    cursor = db.devices.find({})
+    cursor = db.vehicle_locations.find({})
     async for d in cursor:
-        d["id"] = oid_str(d["_id"])
-        d.pop("_id", None)
-        d.setdefault("online", d["id"] in manager.active)
-        docs.append(d)
+        id_str = oid_str(d["_id"])
+        docs.append({
+            "id": id_str,
+            "name": d["identity"]["name"],
+            "hardware_id": d["identity"]["hardware_id"],
+            "license_plate": d["identity"]["license_plate"],
+            "online": id_str in manager.active,
+            "meta": d.get("meta", {}),
+            "telemetry": d.get("telemetry", {}),
+            "status": d.get("status", {})
+        })
     return docs
 
 @app.post("/api/devices")
 async def create_device(device: DeviceCreate):
-    doc = device.dict()
-    res = await db.devices.insert_one(doc)
-    return {"id": oid_str(res.inserted_id), **doc}
+    # Nota: El auto-registro es el método preferido
+    doc = {
+        "identity": {
+            "name": device.name,
+            "hardware_id": device.hardware_id,
+            "license_plate": device.license_plate
+        },
+        "status": {"online": False, "active": False, "last_update": 0},
+        "telemetry": {},
+        "meta": device.meta
+    }
+    res = await db.vehicle_locations.insert_one(doc)
+    return {"id": oid_str(res.inserted_id), **device.dict()}
 
 @app.get("/api/devices/{device_id}")
 async def get_device(device_id: str):
@@ -136,21 +159,21 @@ async def get_device(device_id: str):
 
 class DeviceUpdate(BaseModel):
     name: str | None = None
-    vehicle_id: str | None = None
-    meta: dict | None = None
+    license_plate: str | None = None
 
 @app.put("/api/devices/{device_id}")
 async def update_device(device_id: str, update_data: DeviceUpdate):
     if not ObjectId.is_valid(device_id):
         raise HTTPException(status_code=400, detail="Invalid ID format")
     
-    # Filtrar solo campos que no sean None
-    update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
+    update_dict = {}
+    if update_data.name: update_dict["identity.name"] = update_data.name
+    if update_data.license_plate: update_dict["identity.license_plate"] = update_data.license_plate
     
     if not update_dict:
         raise HTTPException(status_code=400, detail="No data to update")
 
-    res = await db.devices.update_one(
+    res = await db.vehicle_locations.update_one(
         {"_id": ObjectId(device_id)},
         {"$set": update_dict}
     )
@@ -158,11 +181,11 @@ async def update_device(device_id: str, update_data: DeviceUpdate):
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Device not found")
     
-    return {"result": "updated", "fields": list(update_dict.keys())}
+    return {"result": "updated"}
 
 @app.delete("/api/devices/{device_id}")
 async def delete_device(device_id: str):
-    res = await db.devices.delete_one({"_id": ObjectId(device_id)})
+    res = await db.vehicle_locations.delete_one({"_id": ObjectId(device_id)})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="device not found")
     await db.commands.delete_many({"device_id": device_id})
@@ -204,29 +227,43 @@ async def send_command(cmd: CommandCreate, x_api_key: str = Header(None)):
 async def device_ws(websocket: WebSocket, device_id: str):
     logging.info(f"Intento de conexión desde hardware: {device_id}")
     
-    # Buscamos por el ID de hardware inmutable
-    device = await db.devices.find_one({"hardware_id": device_id})
+    # Buscamos por el ID de hardware inmutable en la colección unificada
+    device = await db.vehicle_locations.find_one({"hardware_id": device_id})
 
     if not device:
-        logging.info(f"Nuevo hardware detectado {device_id}. Creando registro...")
+        logging.info(f"Nuevo hardware detectado {device_id}. Creando registro organizado...")
         new_doc = {
-            "hardware_id": device_id,
-            "name": device_id, 
-            "license_plate": "AUTO-" + device_id[-4:], 
-            "online": True,
+            "identity": {
+                "hardware_id": device_id,
+                "name": device_id, 
+                "license_plate": "AUTO-" + device_id[-4:]
+            },
+            "status": {
+                "online": True,
+                "active": False,
+                "last_update": asyncio.get_event_loop().time()
+            },
+            "telemetry": {
+                "latitude": 0.0,
+                "longitude": 0.0,
+                "speed": 0.0,
+                "engine_temp": 0.0,
+                "rpm": 0,
+                "battery_voltage": 0.0
+            },
             "meta": {"status": "initialized"}
         }
-        res = await db.devices.insert_one(new_doc)
+        res = await db.vehicle_locations.insert_one(new_doc)
         real_id = str(res.inserted_id)
     else:
         real_id = str(device["_id"])
-        logging.info(f"Hardware reconocido: {device['name']} (ID: {real_id})")
+        logging.info(f"Hardware reconocido: {device['identity']['name']} (ID: {real_id})")
 
-    # Aceptar conexión ANTES de marcar en DB para evitar bloqueos
+    # Aceptar conexión
     await manager.connect(real_id, websocket)
     
-    # Actualizar estado a online
-    await db.devices.update_one({"_id": ObjectId(real_id)}, {"$set": {"online": True}})
+    # Marcar online en status
+    await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": True}})
     
     try:
         while True:
@@ -234,51 +271,37 @@ async def device_ws(websocket: WebSocket, device_id: str):
             typ = data.get("type")
             if typ == "status":
                 meta = data.get("meta", {})
-                # 1. Actualizar la colección de dispositivos (para el dashboard)
-                await db.devices.update_one({"_id": ObjectId(real_id)}, {"$set": {"meta": meta}})
+                sensors = meta.get("sensors", {})
+                gps = sensors.get("gps", {})
+                relays = meta.get("relays", {})
                 
-                # 2. Sincronizar con vehicle_locations para la base de datos externa
-                # Obtenemos la matrícula actual del dispositivo
-                current_dev = await db.devices.find_one({"_id": ObjectId(real_id)})
-                plate = current_dev.get("license_plate") or current_dev.get("vehicle_id")
+                # Actualizar por secciones organizadas
+                update_doc = {
+                    "meta": meta,
+                    "status.active": relays.get("0", False),
+                    "status.last_update": asyncio.get_event_loop().time(),
+                    "telemetry.latitude": gps.get("lat", 0.0),
+                    "telemetry.longitude": gps.get("lon", 0.0),
+                    "telemetry.speed": gps.get("speed", 0.0),
+                    "telemetry.engine_temp": sensors.get("engine", {}).get("temp", 0.0),
+                    "telemetry.rpm": sensors.get("engine", {}).get("rpm", 0),
+                    "telemetry.battery_voltage": sensors.get("battery", 0.0)
+                }
                 
-                if plate:
-                    sensors = meta.get("sensors", {})
-                    gps = sensors.get("gps", {})
-                    relays = meta.get("relays", {})
-                    
-                    # El vehículo está 'active' si el Relay 0 está ON
-                    is_active = relays.get("0", False)
-                    
-                    location_doc = {
-                        "license_plate": plate,
-                        "latitude": gps.get("lat", 0.0),
-                        "longitude": gps.get("lon", 0.0),
-                        "speed": gps.get("speed", 0.0),
-                        "engine_temp": sensors.get("engine", {}).get("temp", 0.0),
-                        "rpm": sensors.get("engine", {}).get("rpm", 0),
-                        "battery_voltage": sensors.get("battery", 0.0),
-                        "active": is_active,
-                        "last_update": asyncio.get_event_loop().time()
-                    }
-                    
-                    # Upsert en vehicle_locations usando license_plate como clave
-                    await db.vehicle_locations.update_one(
-                        {"license_plate": plate},
-                        {"$set": location_doc},
-                        upsert=True
-                    )
-                    logging.debug(f"Sincronizado vehicle_locations para {plate}")
+                await db.vehicle_locations.update_one(
+                    {"_id": ObjectId(real_id)},
+                    {"$set": update_doc}
+                )
 
             elif typ == "ack":
                 await db.commands.update_one({"device_id": real_id, "status": "sent"}, {"$set": {"status": "ack"}})
     except WebSocketDisconnect:
         manager.disconnect(real_id)
-        await db.devices.update_one({"_id": ObjectId(real_id)}, {"$set": {"online": False}})
+        await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": False}})
     except Exception as e:
         logging.error(f"Error en WS {real_id}: {e}")
         manager.disconnect(real_id)
-        await db.devices.update_one({"_id": ObjectId(real_id)}, {"$set": {"online": False}})
+        await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": False}})
 
 # Simple health
 @app.get("/health")
