@@ -188,7 +188,7 @@ class VehicleLocationService
 ### Controlador: IoTController.php
 
 ```php
-// Endpoints públicos
+// Endpoints autenticados
 GET  /api/iot/health              // Health check
 GET  /api/iot/devices             // Lista dispositivos
 GET  /api/iot/devices/{id}        // Detalle dispositivo

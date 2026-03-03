@@ -287,14 +287,17 @@ $result = $iotService->updateDevicePlate($deviceId, '1234ABC');
 
 | Método | Ruta | Descripción | Acceso |
 |--------|------|-------------|--------|
-| GET | `/api/iot/health` | Estado microservicio | Público |
+| GET | `/api/iot/health` | Estado microservicio | Autenticado |
 | GET | `/api/iot/devices` | Lista dispositivos | Autenticado |
 | GET | `/api/iot/devices/{id}` | Detalle dispositivo | Autenticado |
 | GET | `/api/iot/devices/{id}/ping` | Verificar online | Autenticado |
+| GET | `/api/iot/logs` | Logs de comandos | Autenticado |
 | POST | `/api/admin/iot/devices/{id}/on` | Encender | Admin |
 | POST | `/api/admin/iot/devices/{id}/off` | Apagar | Admin |
 | POST | `/api/admin/iot/devices/{id}/command` | Comando genérico | Admin |
 | POST | `/api/admin/iot/devices/{id}/link` | Vincular a vehículo | Admin |
+| GET | `/api/admin/iot/devices/unlinked` | Dispositivos sin vincular | Admin |
+| GET | `/api/admin/iot/vehicles/available` | Vehículos disponibles | Admin |
 
 ---
 
