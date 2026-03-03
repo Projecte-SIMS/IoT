@@ -7,7 +7,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPExcept
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import motor.motor_asyncio
 from bson import ObjectId
 from dotenv import load_dotenv
@@ -64,12 +64,6 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 # Pydantic models
-class DeviceCreate(BaseModel):
-    name: str
-    hardware_id: str | None = None
-    license_plate: str | None = Field(None, alias="vehicle_id")
-    meta: dict = Field(default_factory=dict)
-
 class CommandCreate(BaseModel):
     device_id: str
     action: str
