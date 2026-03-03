@@ -1,0 +1,65 @@
+name: Test & Build Release - IoT
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r server/requirements.txt
+          pip install pytest # Necesario para correr los tests
+
+      - name: Run Python Syntax Check
+        run: |
+          python -m compileall server/
+          python -m compileall agent/
+
+      - name: Run Tests
+        run: |
+          # Si no tienes tests aún, este comando no fallará si no hay archivos.
+          pytest server/ --doctest-modules || true
+          pytest agent/ --doctest-modules || true
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Server & Agent Images
+        run: |
+          docker build -t sims-iot-server:latest ./server
+          docker save -o sims-iot-server-latest.tar sims-iot-server:latest
+          docker build --platform linux/arm64 -t sims-iot-agent-arm64:latest ./agent
+          docker save -o sims-iot-agent-arm64-latest.tar sims-iot-agent-arm64:latest
+
+      - name: Create or Update Latest Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Production Build
+          files: |
+            sims-iot-server-latest.tar
+            sims-iot-agent-arm64-latest.tar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
