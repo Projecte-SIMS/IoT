@@ -2,6 +2,29 @@
 
 Sistema de gestión y control remoto para dispositivos Raspberry Pi mediante un microservicio centralizado en FastAPI, comunicación por WebSockets y persistencia en MongoDB.
 
+## 🏗️ Arquitectura del Sistema
+
+```
+┌─────────────────┐     WebSocket      ┌─────────────────┐
+│  Raspberry Pi   │ ◄───────────────► │  FastAPI Server │◄──── MongoDB Atlas
+│    (Agentes)    │    Telemetría      │   (Puerto 8001) │      (Solo FastAPI
+└─────────────────┘    + Comandos      └────────┬────────┘       accede a Mongo)
+     (Internet)                                 │
+                                                │ HTTP REST
+                                                │ + API Key
+                                                │
+┌─────────────────┐      API REST      ┌────────▼────────┐
+│  Vue Frontend   │ ◄───────────────► │  Laravel Backend │──── PostgreSQL
+│                 │                    │   (Puerto 8000)  │     (Users, Reservas)
+└─────────────────┘                    └─────────────────┘
+```
+
+**Flujo de datos:**
+1. **Agentes → FastAPI**: Raspberry Pi envía telemetría vía WebSocket
+2. **FastAPI ↔ MongoDB**: FastAPI es el ÚNICO que accede a MongoDB
+3. **Laravel → FastAPI**: Laravel consulta dispositivos y envía comandos vía HTTP
+4. **Frontend → Laravel**: Vue consume la API de Laravel (nunca habla con FastAPI directamente)
+
 ## 🚀 Despliegue Rápido (Servidor)
 
 ### 1. Requisitos
@@ -13,7 +36,7 @@ Copia el archivo de ejemplo y configura tu `API_KEY` y `MONGO_URI`:
 ```bash
 cp .env.example server/.env
 ```
-*   **API_KEY:** Clave de seguridad para autorizar comandos desde la web.
+*   **API_KEY:** Clave de seguridad para autorizar comandos desde Laravel.
 *   **MONGO_URI:** Dirección de tu base de datos MongoDB (Local o Atlas).
 
 ### 3. Levantar con Docker
@@ -43,24 +66,12 @@ El agente es **Plug & Play** y se auto-registra al conectar.
 
 ---
 
-## 🏗️ Arquitectura y Flujo de Datos
-
-El sistema utiliza una arquitectura de **estrella** basada en **eventos en tiempo real**:
-
-1.  **Registro Automático:** Al conectar, el agente envía su ID único (Hardware Serial/MAC). Si el servidor no lo conoce, lo crea en MongoDB instantáneamente.
-2.  **Telemetría (Agente → Servidor):** Cada 10 segundos, el agente reporta el estado de sus relés. El servidor actualiza la DB y la web lo muestra.
-3.  **Comandos (Web → Servidor → Agente):** 
-    *   La Web envía un `POST /api/command` con la `API_KEY`.
-    *   El servidor busca el socket activo de la Raspberry.
-    *   El comando viaja por el WebSocket y la Raspberry actúa sobre el GPIO.
-    *   La Raspberry responde con un `ack` para confirmar la acción.
-
----
-
 ## 🔒 Seguridad
+
 *   **Control de Acceso:** Los comandos críticos requieren el header `x-api-key`. Sin esta clave, nadie puede apagar/encender tus dispositivos.
 *   **Variables de Entorno:** Todas las credenciales están protegidas en archivos `.env` y no están grabadas en el código fuente.
 *   **Validación:** Uso de Pydantic para asegurar que los datos recibidos tienen el formato correcto.
+*   **Comunicación Laravel:** Laravel se autentica con la misma API_KEY para enviar comandos.
 
 ---
 
@@ -75,9 +86,51 @@ El sistema utiliza una arquitectura de **estrella** basada en **eventos en tiemp
 ---
 
 ## 📋 Endpoints API Principales
-*   `GET /api/devices`: Lista todos los dispositivos y su estado online.
-*   `POST /api/command`: Envía una acción (on/off) a un dispositivo (Requiere `x-api-key`).
+
+### Lectura (GET)
+| Endpoint | Descripción | Autenticación |
+|----------|-------------|---------------|
+| `GET /api/devices` | Lista todos los dispositivos y su estado | Ninguna |
+| `GET /api/devices/{id}` | Detalle de un dispositivo | Ninguna |
+| `GET /api/ping/{id}` | Verifica si dispositivo está online | Ninguna |
+| `GET /health` | Estado del microservicio | Ninguna |
+
+### Comandos (POST) - Requiere API Key
+| Endpoint | Descripción | Header |
+|----------|-------------|--------|
+| `POST /api/command` | Envía acción a un dispositivo | `x-api-key` |
+
+**Body del comando:**
+```json
+{
+  "device_id": "device-123",
+  "action": "on",  // "on", "off", "reboot"
+  "relay": 0       // 0 o 1
+}
+```
+
+### WebSocket (Agentes)
 *   `GET /ws/{device_id}`: Punto de conexión WebSocket para los agentes.
 
 ---
+
+## 🔗 Integración con Laravel
+
+Laravel accede a este microservicio mediante HTTP REST:
+
+**Configuración en Laravel (.env):**
+```env
+IOT_MICROSERVICE_URL=http://localhost:8001
+IOT_API_KEY=MACMECMIC
+IOT_TIMEOUT=10
+```
+
+**Endpoints en Laravel:**
+- `GET /api/iot/devices` - Lista dispositivos
+- `GET /api/iot/devices/{id}` - Detalle dispositivo
+- `POST /api/admin/iot/devices/{id}/on` - Encender (solo Admin)
+- `POST /api/admin/iot/devices/{id}/off` - Apagar (solo Admin)
+
+---
+
 *Este sistema permite la gestión escalable de flotas de vehículos IoT de manera automática y segura.*
