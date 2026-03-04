@@ -1,6 +1,6 @@
 # Documentación del Subsistema de Sensores y Actuadores IoT
 
-**Última actualización:** 2026-03-03
+**Última actualización:** 2026-03-04
 
 Esta documentación detalla el estado real del desarrollo del subsistema IoT, cumpliendo con los requisitos de diseño, modelado y funcionalidad.
 
@@ -8,7 +8,7 @@ Esta documentación detalla el estado real del desarrollo del subsistema IoT, cu
 
 ## 1. Diagrama de Diseño del Subsistema
 
-El diseño actual sigue una arquitectura de **estrella centralizada** con comunicación asíncrona:
+El diseño actual sigue una arquitectura de estrella centralizada con comunicación asíncrona:
 
 ```
 ┌─────────────────┐     WebSocket      ┌─────────────────┐
@@ -25,11 +25,11 @@ El diseño actual sigue una arquitectura de **estrella centralizada** con comuni
 ```
 
 **Componentes:**
-- **Nodo Local (Raspberry Pi):** Agente Python que gestiona GPIO (relés) y lectura de sensores (GPS)
-- **Servidor de Control (FastAPI):** Broker de mensajes WebSocket + API REST
-- **Base de Datos (MongoDB):** Estado persistente y telemetría
+- **Nodo Local (Raspberry Pi):** Agente Python que gestiona GPIO (relés) y lectura de sensores (GPS).
+- **Servidor de Control (FastAPI):** Broker de mensajes WebSocket y API REST.
+- **Base de Datos (MongoDB):** Almacenamiento del estado persistente y telemetría.
 
-**Estado:** ✅ Aprobado y operativo
+**Estado:** Aprobado y operativo.
 
 ---
 
@@ -70,50 +70,48 @@ Colección: `vehicle_locations`
 
 ## 3. Funcionalidades Implementadas
 
-### ✅ Completadas
+### Completadas
 
 | Funcionalidad | Descripción | Estado |
 |---------------|-------------|--------|
-| Posicionamiento GPS | Lectura de coordenadas, velocidad, altitud | ✅ |
-| Monitorización de Energía | Voltaje de batería del vehículo | ✅ |
-| Estado del Motor | RPM y temperatura (simulada/real) | ✅ |
-| Auto-registro | Dispositivos se registran automáticamente | ✅ |
-| Control Remoto | Encender/apagar vehículos | ✅ |
-| Historial de Rutas | Almacena últimos 200 puntos GPS | ✅ |
-| WebSocket Bidireccional | Telemetría + comandos en tiempo real | ✅ |
-| Reconexión Automática | Agente reconecta si pierde conexión | ✅ |
+| Posicionamiento GPS | Lectura de coordenadas, velocidad y altitud | Completado |
+| Monitorización de Energía | Lectura del voltaje de la batería del vehículo | Completado |
+| Estado del Motor | RPM y temperatura (simulada o real según hardware) | Completado |
+| Auto-registro | Los dispositivos se registran automáticamente al conectar | Completado |
+| Control Remoto | Capacidad para encender y apagar vehículos a distancia | Completado |
+| Historial de Rutas | Almacenamiento de los últimos 200 puntos GPS | Completado |
+| WebSocket Bidireccional | Envío de telemetría y recepción de comandos en tiempo real | Completado |
+| Reconexión Automática | El agente reintenta la conexión si se pierde el enlace | Completado |
 
-### ⚠️ Pendientes
+### Pendientes
 
 | Funcionalidad | Descripción | Prioridad |
 |---------------|-------------|-----------|
-| SSL/TLS WebSocket | Cifrado en producción | Media |
-| Acelerómetro | Detección de colisiones | Baja |
-| Carcasa Protectora | Hardware para automoción | Baja |
+| SSL/TLS WebSocket | Cifrado de comunicaciones en entorno de producción | Media |
+| Acelerómetro | Implementación de detección automática de colisiones | Baja |
+| Carcasa Protectora | Diseño de hardware adaptado para automoción | Baja |
 
 ---
 
 ## 4. Implementación del Actuador ON/OFF
 
-El control de encendido/apagado se implementa mediante un **Relé de Potencia**:
+El control de encendido y apagado se realiza mediante un relé de potencia conectado a la Raspberry Pi.
 
 ### Hardware
-- **Pin GPIO:** 17 (configurable via `RELAY0_PIN`)
-- **Librería:** gpiozero (con MockRelay para pruebas)
+- **Pin GPIO:** 17 (configurable mediante la variable `RELAY0_PIN`).
+- **Librería utilizada:** `gpiozero` (incluye un `MockRelay` para pruebas en sistemas sin GPIO).
 
-### Flujo de Comando
+### Flujo de Ejecución de un Comando
 
-```
-1. Admin envía POST /api/admin/iot/devices/{id}/on desde Laravel
-2. Laravel llama a VehicleLocationService.turnOn()
-3. VehicleLocationService envía POST /api/command al microservicio
-4. FastAPI transmite comando por WebSocket al agente
-5. Agente conmuta GPIO y envía ACK
-6. Estado se actualiza en MongoDB (status.active = true)
-7. Laravel recibe confirmación
-```
+1. El administrador envía una petición `POST /api/admin/iot/devices/{id}/on` desde el backend de Laravel.
+2. Laravel invoca el método `turnOn()` de la clase `VehicleLocationService`.
+3. El servicio envía una petición `POST /api/command` al microservicio FastAPI con la API Key correspondiente.
+4. FastAPI transmite el comando a través del WebSocket activo hacia el agente de la Raspberry Pi.
+5. El agente conmuta el pin GPIO y devuelve una confirmación (ACK) al servidor.
+6. El estado se actualiza en la base de datos MongoDB (`status.active = true`).
+7. Laravel recibe la confirmación final de la operación.
 
-### Código del Agente
+### Ejemplo de código del Agente
 
 ```python
 # agent/agent.py
@@ -122,7 +120,7 @@ if action == "on":
 elif action == "off":
     RELAYS[relay_idx].off()
 
-# Enviar confirmación
+# Envío de confirmación de estado
 ack = {"type": "ack", "payload": {"relay": relay_idx, "state": r.is_active}}
 await ws.send(json.dumps(ack))
 ```
@@ -131,7 +129,7 @@ await ws.send(json.dumps(ack))
 
 ## 5. Telemetría del Agente
 
-El agente envía datos cada **5 segundos**:
+El agente está configurado para enviar datos de sus sensores cada 5 segundos:
 
 ```python
 payload = {
@@ -151,64 +149,43 @@ await ws.send(json.dumps(payload))
 
 ---
 
-## 6. Integración Laravel ↔ FastAPI
+## 6. Integración entre Laravel y FastAPI
 
-### Servicio: VehicleLocationService.php
+### Servicio de comunicación: VehicleLocationService.php
 
-```php
-class VehicleLocationService
-{
-    // Obtener ubicaciones de todos los vehículos
-    public function getLocations(): array
+El backend de Laravel interactúa con el microservicio mediante los siguientes métodos:
 
-    // Obtener todos los dispositivos
-    public function getAllDevices(): array
+- **getLocations():** Obtiene las ubicaciones de todos los vehículos activos.
+- **getAllDevices():** Recupera la lista completa de dispositivos.
+- **getDevice(string $deviceId):** Obtiene los detalles de un dispositivo específico.
+- **sendCommand(string $deviceId, string $action, int $relay = 0):** Envía un comando (on, off o reboot).
+- **turnOn(string $deviceId) / turnOff(string $deviceId):** Métodos abreviados para el control de encendido.
+- **healthCheck():** Verifica el estado de salud del microservicio.
+- **isDeviceOnline(string $deviceId):** Comprueba si un dispositivo está conectado actualmente.
+- **updateDevicePlate(string $deviceId, string $licensePlate):** Vincula un dispositivo a una matrícula específica.
 
-    // Obtener un dispositivo específico
-    public function getDevice(string $deviceId): ?array
+### Endpoints definidos en Laravel (IoTController.php)
 
-    // Enviar comando (on/off/reboot)
-    public function sendCommand(string $deviceId, string $action, int $relay = 0): array
+Rutas para usuarios autenticados:
+- `GET /api/iot/health`: Comprobación de estado.
+- `GET /api/iot/devices`: Listado de dispositivos.
+- `GET /api/iot/devices/{id}`: Detalle de dispositivo.
+- `GET /api/iot/devices/{id}/ping`: Verificación de conexión online.
+- `GET /api/iot/logs`: Historial de comandos ejecutados.
 
-    // Atajos para on/off
-    public function turnOn(string $deviceId): array
-    public function turnOff(string $deviceId): array
-
-    // Health check del microservicio
-    public function healthCheck(): bool
-
-    // Verificar si dispositivo está online
-    public function isDeviceOnline(string $deviceId): bool
-
-    // Vincular dispositivo a vehículo
-    public function updateDevicePlate(string $deviceId, string $licensePlate): array
-}
-```
-
-### Controlador: IoTController.php
-
-```php
-// Endpoints autenticados
-GET  /api/iot/health              // Health check
-GET  /api/iot/devices             // Lista dispositivos
-GET  /api/iot/devices/{id}        // Detalle dispositivo
-GET  /api/iot/devices/{id}/ping   // Verificar online
-GET  /api/iot/logs                // Logs de comandos
-
-// Endpoints admin
-POST /api/admin/iot/devices/{id}/on       // Encender
-POST /api/admin/iot/devices/{id}/off      // Apagar
-POST /api/admin/iot/devices/{id}/command  // Comando genérico
-POST /api/admin/iot/devices/{id}/link     // Vincular a vehículo
-GET  /api/admin/iot/devices/unlinked      // Dispositivos sin vincular
-GET  /api/admin/iot/vehicles/available    // Vehículos disponibles
-```
+Rutas exclusivas para administradores:
+- `POST /api/admin/iot/devices/{id}/on`: Encendido remoto.
+- `POST /api/admin/iot/devices/{id}/off`: Apagado remoto.
+- `POST /api/admin/iot/devices/{id}/command`: Envío de comando genérico.
+- `POST /api/admin/iot/devices/{id}/link`: Vinculación a un vehículo.
+- `GET /api/admin/iot/devices/unlinked`: Dispositivos pendientes de vinculación.
+- `GET /api/admin/iot/vehicles/available`: Lista de vehículos disponibles.
 
 ---
 
-## 7. Logs de Comandos (CommandLog)
+## 7. Registro de Comandos (CommandLog)
 
-Todos los comandos se registran en PostgreSQL:
+Todas las acciones de control realizadas por los usuarios se registran en la base de datos PostgreSQL de Laravel para auditoría:
 
 ```php
 // app/Models/CommandLog.php
@@ -217,24 +194,22 @@ CommandLog::create([
     'device_id' => $deviceId,
     'action' => 'on',
     'payload' => [],
-    'status' => 'sent', // 'sent' o 'failed'
+    'status' => 'sent', // Estados: 'sent' o 'failed'
 ]);
 ```
 
 ---
 
-## 8. Configuración
+## 8. Configuración del Sistema
 
 ### Servidor FastAPI (.env)
-
 ```env
-MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/
+MONGO_URI=mongodb+srv://usuario:password@cluster.mongodb.net/
 DB_NAME=raspi_db
 API_KEY=TU_CLAVE_SECRETA
 ```
 
-### Agente Raspberry (.env)
-
+### Agente Raspberry Pi (.env)
 ```env
 SERVER_WS=ws://192.168.1.100:8001
 DEVICE_ID=Camion-01
@@ -242,36 +217,25 @@ RELAY0_PIN=17
 GPS_PORT=/dev/ttyS0
 ```
 
-### Laravel Backend (.env)
-
-```env
-IOT_MICROSERVICE_URL=http://localhost:8001
-IOT_API_KEY=TU_CLAVE_SECRETA
-IOT_TIMEOUT=5
-```
-
 ---
 
-## 9. Seguridad
+## 9. Medidas de Seguridad
 
-| Medida | Implementación |
+| Medida | Descripción |
 |--------|----------------|
-| API Key | Header `x-api-key` requerido para comandos |
-| Variables de Entorno | Credenciales en `.env`, no en código |
-| Validación | Pydantic valida datos de entrada |
-| Aislamiento | Solo FastAPI accede a MongoDB |
-| Rate Limiting | Implementado en Laravel |
+| API Key | Uso obligatorio del header `x-api-key` para el envío de comandos |
+| Gestión de Secretos | Uso de archivos `.env` para evitar credenciales en el código fuente |
+| Validación de Datos | Implementación de esquemas Pydantic para validar entradas |
+| Aislamiento de BD | El acceso a MongoDB está restringido exclusivamente a FastAPI |
 
 ---
 
 ## 10. Próximos Pasos
 
-| Prioridad | Tarea | Esfuerzo |
-|-----------|-------|----------|
-| 🟠 Media | SSL/TLS para WebSocket en producción | 4h |
-| 🟡 Baja | Acelerómetro para colisiones | 8h |
-| 🟡 Baja | Carcasa protectora certificada | Hardware |
+1. Implementar SSL/TLS para asegurar las comunicaciones por WebSocket.
+2. Integrar la lectura de acelerómetros para mejorar la seguridad del vehículo.
+3. Finalizar el diseño de la carcasa para protección del hardware en entornos reales.
 
 ---
 
-*Documento preparado para la revisión de Sprint 5.*
+*Documento preparado para la revisión del Sprint 5.*
