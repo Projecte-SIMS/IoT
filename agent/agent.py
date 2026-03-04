@@ -51,18 +51,21 @@ GPS_PORT = os.getenv("GPS_PORT", "/dev/ttyS0") # Puerto serie típico en RPi
 
 # Inicialización de Relés
 RELAYS = {}
+
+class MockRelay:
+    def __init__(self): self._v = False
+    def on(self): self._v = True; logging.info("Mock Relay ON")
+    def off(self): self._v = False; logging.info("Mock Relay OFF")
+    @property
+    def is_active(self): return self._v
+
 if OutputDevice:
     try:
         RELAYS[0] = OutputDevice(RELAY0_PIN, active_high=True, initial_value=False)
     except Exception as e:
-        logging.error(f"Error GPIO: {e}")
+        logging.warning(f"Error GPIO: {e}. Usando MockRelay.")
+        RELAYS[0] = MockRelay()
 else:
-    class MockRelay:
-        def __init__(self): self._v = False
-        def on(self): self._v = True; logging.info("Mock Relay ON")
-        def off(self): self._v = False; logging.info("Mock Relay OFF")
-        @property
-        def is_active(self): return self._v
     RELAYS[0] = MockRelay()
     logging.info("Usando MockRelay (No se detectó hardware GPIO)")
 
@@ -146,12 +149,15 @@ async def handle_messages(ws):
             logging.warning(f"Error procesando mensaje: {e}")
 
 async def run():
-    if not websockets: return
+    if not websockets:
+        logging.error("Librería 'websockets' NO instalada. Ejecuta 'pip install websockets'")
+        return
     uri = f"{SERVER_WS}/ws/{DEVICE_ID}"
     while True:
         try:
             logging.info(f"Conectando a {uri}...")
             async with websockets.connect(uri) as ws:
+                logging.info("✅ ¡CONEXIÓN ESTABLECIDA CON EL SERVIDOR!")
                 # Ejecutar lectura de GPS, envío de estado y escucha de comandos
                 await asyncio.gather(
                     read_gps(),

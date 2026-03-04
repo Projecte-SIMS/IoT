@@ -69,6 +69,10 @@ class CommandCreate(BaseModel):
     action: str
     relay: int = 0
 
+class DeviceUpdate(BaseModel):
+    license_plate: str
+    name: str = None
+
 # API: devices
 @app.get("/api/devices")
 async def list_devices():
@@ -87,6 +91,55 @@ async def list_devices():
             "status": d.get("status", {})
         })
     return docs
+
+@app.get("/api/devices/{device_id}")
+async def get_device(device_id: str):
+    try:
+        obj_id = ObjectId(device_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid device ID format")
+        
+    device = await db.vehicle_locations.find_one({"_id": obj_id})
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+        
+    id_str = str(device["_id"])
+    return {
+        "id": id_str,
+        "name": device["identity"]["name"],
+        "hardware_id": device["identity"]["hardware_id"],
+        "license_plate": device["identity"]["license_plate"],
+        "online": id_str in manager.active,
+        "meta": device.get("meta", {}),
+        "telemetry": device.get("telemetry", {}),
+        "status": device.get("status", {})
+    }
+
+@app.put("/api/devices/{device_id}")
+async def update_device(device_id: str, update: DeviceUpdate):
+    try:
+        obj_id = ObjectId(device_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid device ID format")
+        
+    # Prepare update data
+    update_data = {"identity.license_plate": update.license_plate}
+    if update.name:
+        update_data["identity.name"] = update.name
+        
+    result = await db.vehicle_locations.update_one(
+        {"_id": obj_id},
+        {"$set": update_data}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Device not found")
+        
+    return {"status": "updated"}
+
+@app.get("/api/ping/{device_id}")
+async def ping_device(device_id: str):
+    return {"device_id": device_id, "online": device_id in manager.active}
 
 @app.get("/api/devices/{device_id}/route")
 async def get_device_route(device_id: str):

@@ -142,6 +142,9 @@ sudo systemctl start sims-agent
 | Endpoint | Descripción |
 |----------|-------------|
 | `GET /api/devices` | Devuelve la lista de todos los dispositivos registrados |
+| `GET /api/devices/{device_id}` | Devuelve el detalle de un dispositivo específico |
+| `PUT /api/devices/{device_id}` | Actualiza los datos de un dispositivo |
+| `GET /api/ping/{device_id}` | Verifica si un dispositivo está online |
 | `GET /api/devices/{id}/route` | Devuelve el historial de ruta de un dispositivo |
 | `GET /health` | Comprueba el estado de salud del microservicio |
 
