@@ -1,9 +1,15 @@
 # Raspberry Pi IoT Management System
 
-**Versión:** Sprint 5  
-**Última actualización:** 2026-03-04
+**Versión:** Sprint 4 - Production Ready  
+**Última actualización:** 2026-03-05
 
 Sistema de gestión y control remoto para dispositivos Raspberry Pi mediante un microservicio centralizado en FastAPI, comunicación por WebSockets y persistencia en MongoDB.
+
+**✨ Novedades Sprint 4:**
+- ✅ Agente con reconexión automática y verificación de internet
+- ✅ Servicio systemd mejorado con auto-setup completo
+- ✅ Configuración simplificada para producción (Render) y desarrollo local
+- ✅ Despliegue en la nube con Render + MongoDB Atlas
 
 ---
 
@@ -37,10 +43,17 @@ Sistema de gestión y control remoto para dispositivos Raspberry Pi mediante un 
 ```
 Raspberry_py/
 ├── agent/                      # Código que se ejecuta en la Raspberry Pi
-│   ├── agent.py               # Script principal del agente
+│   ├── agent.py               # Script principal del agente (con reconexión automática)
 │   ├── requirements.txt       # Dependencias de Python para el agente
-│   ├── run_agent.sh          # Script de ejecución del agente
-│   ├── install_service.sh    # Instalador para servicio systemd
+│   ├── run_agent_auto.sh     # ⭐ Script mejorado con auto-setup
+│   ├── run_agent.sh          # Script básico de ejecución
+│   ├── install_service.sh    # ⭐ Instalador mejorado para servicio systemd
+│   ├── uninstall_service.sh  # Desinstalador del servicio
+│   ├── .env                  # Configuración activa
+│   ├── .env.production       # ⭐ Config para producción (Render)
+│   ├── .env.local           # ⭐ Config para desarrollo local
+│   ├── README_AGENT.md      # Guía completa del agente
+│   ├── SERVICE_GUIDE.md     # ⭐ Guía completa del servicio systemd
 │   ├── Dockerfile
 │   └── .env                  # Configuración local del agente
 │
@@ -55,6 +68,8 @@ Raspberry_py/
 ├── docker-compose.yml         # Orquestación de contenedores
 ├── requirements.txt           # Dependencias globales
 ├── README.md                  # Este archivo
+├── QUICKSTART_RASPBERRY.md    # ⭐ Guía rápida para Raspberry Pi
+├── DEPLOY_AGENT.md           # ⭐ Guía de deploy detallada
 ├── ESTADO_SUBSISTEMA_IOT.md  # Documentación técnica detallada
 └── funcinament_agent.md      # Guía de funcionamiento del agente
 ```
@@ -92,9 +107,55 @@ El servidor estará disponible en la dirección `http://localhost:8001`.
 
 ## Configuración del Agente (Raspberry Pi)
 
-El agente es Plug & Play y se registra automáticamente al establecer conexión.
+El agente tiene **reconexión automática** y soporta despliegue local y en la nube.
 
-### Instalación Manual
+### 🚀 Quick Start (Recomendado)
+
+```bash
+cd agent
+
+# Para PRODUCCIÓN (conecta a Render):
+./run_agent_auto.sh prod
+
+# Para DESARROLLO LOCAL:
+./run_agent_auto.sh local
+```
+
+**El script automáticamente:**
+- ✅ Crea el entorno virtual si no existe
+- ✅ Instala dependencias
+- ✅ Verifica internet antes de conectar
+- ✅ Reconecta automáticamente si se pierde conexión (5-60s)
+- ✅ Mantiene la conexión viva con ping/pong
+
+### 📋 Instalación como Servicio Systemd (Inicio Automático)
+
+Para que el agente se inicie automáticamente al arrancar la Raspberry Pi:
+
+```bash
+cd agent
+sudo ./install_service.sh
+```
+
+**El servicio:**
+- ✅ Se inicia automáticamente al arrancar
+- ✅ Se reinicia automáticamente si se cae (cada 10s)
+- ✅ Espera a que haya internet antes de conectar
+- ✅ Logs centralizados en systemd
+
+**Comandos útiles:**
+```bash
+sudo systemctl status sims-agent     # Ver estado
+sudo journalctl -u sims-agent -f     # Ver logs en tiempo real
+sudo systemctl restart sims-agent    # Reiniciar
+sudo ./uninstall_service.sh          # Desinstalar servicio
+```
+
+📖 **Documentación completa:** Ver [`QUICKSTART_RASPBERRY.md`](./QUICKSTART_RASPBERRY.md) y [`agent/SERVICE_GUIDE.md`](./agent/SERVICE_GUIDE.md)
+
+---
+
+### Instalación Manual (Avanzada)
 
 ```bash
 cd agent
@@ -126,12 +187,17 @@ sudo systemctl start sims-agent
 
 ### Variables de Entorno del Agente
 
-| Variable | Descripción | Valor por defecto |
-|----------|-------------|---------|
-| `SERVER_WS` | URL del servidor WebSocket | `ws://localhost:8001` |
-| `DEVICE_ID` | Identificador único del dispositivo | Generado por hardware |
-| `RELAY0_PIN` | Pin GPIO utilizado para el relé | `17` |
-| `GPS_PORT` | Puerto serie para el módulo GPS | `/dev/ttyS0` |
+| Variable | Descripción | Producción | Local |
+|----------|-------------|------------|-------|
+| `SERVER_WS` | URL del servidor WebSocket | `wss://sims-iot-microservice.onrender.com` | `ws://localhost:8001` |
+| `DEVICE_ID` | Identificador único del dispositivo | (Auto-generado) | (Auto-generado) |
+| `RELAY0_PIN` | Pin GPIO utilizado para el relé | `17` | `17` |
+| `GPS_PORT` | Puerto serie para el módulo GPS | `/dev/ttyS0` | `/dev/ttyS0` |
+
+**Archivos de configuración:**
+- `.env.production` → Para conectar a Render (nube)
+- `.env.local` → Para desarrollo local
+- `.env` → Configuración activa (copiada de una de las anteriores)
 
 ---
 
@@ -290,16 +356,27 @@ $resultLink = $iotService->updateDevicePlate($deviceId, '1234ABC');
 
 ## Estado Actual del Proyecto
 
-### Funcionalidades Completadas
-- Servidor FastAPI con soporte para WebSockets.
-- Agente Python optimizado para Raspberry Pi.
-- Sistema de auto-registro de nuevos dispositivos.
-- Transmisión de telemetría (GPS, estado del motor, voltaje de batería).
-- Control remoto de actuadores (relés para encendido/apagado).
-- Almacenamiento y consulta del historial de rutas.
-- Integración completa con el backend de Laravel.
-- Contenerización mediante Docker Compose.
-- Documentación técnica actualizada.
+### Funcionalidades Completadas (Sprint 4)
+- ✅ Servidor FastAPI con soporte para WebSockets
+- ✅ Agente Python optimizado con reconexión automática
+- ✅ Verificación de internet antes de conectar
+- ✅ Backoff exponencial para reconexiones (5s → 60s)
+- ✅ Ping/pong para mantener conexiones vivas
+- ✅ Servicio systemd mejorado con auto-setup completo
+- ✅ Configuración simplificada para producción y desarrollo
+- ✅ Despliegue en Render + MongoDB Atlas
+- ✅ Sistema de auto-registro de nuevos dispositivos
+- ✅ Transmisión de telemetría (GPS, estado del motor, voltaje de batería)
+- ✅ Control remoto de actuadores (relés para encendido/apagado)
+- ✅ Almacenamiento y consulta del historial de rutas
+- ✅ Integración completa con el backend de Laravel
+- ✅ Contenerización mediante Docker Compose
+- ✅ Documentación técnica completa y actualizada
+
+### URLs de Producción
+- 🌐 **Microservicio IoT:** https://sims-iot-microservice.onrender.com
+- 🌐 **Backend API:** https://sims-backend-api.onrender.com
+- 🌐 **Frontend:** https://frontend-nine-orcin-waqisje40z.vercel.app
 
 ### Tareas Pendientes
 - Implementación de cifrado SSL/TLS para las conexiones WebSocket en producción.
