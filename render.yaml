@@ -3,6 +3,7 @@ services:
     name: sims-iot-microservice
     env: docker
     dockerContext: ./server
+    dockerfilePath: server/Dockerfile # Añadimos la ruta exacta al archivo
     plan: free
     envVars:
       - key: IOT_API_KEY
