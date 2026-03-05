@@ -269,11 +269,5 @@ $isOnline = $iotService->healthCheck();
 
 ---
 
-## 📞 Soporte
-
-Para más información, consulta la [documentación completa](./docs/) o abre un issue en GitHub.
-
----
-
 **Sistema SIMS - Subsistema IoT** 🚀  
 Proyecto educativo - CFGS DAW
