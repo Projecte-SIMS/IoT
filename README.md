@@ -1,4 +1,4 @@
-# 🤖 Subsistema IoT - Raspberry Pi
+# Subsistema IoT - Raspberry Pi
 
 **Versión:** Sprint 4 - Production Ready  
 **Última actualización:** 2026-03-05
@@ -7,29 +7,29 @@ Sistema de gestión y control remoto de dispositivos Raspberry Pi mediante WebSo
 
 ---
 
-## 📋 Índice
+## Índice
 
-- [Descripción General](#-descripción-general)
-- [Arquitectura](#-arquitectura)
-- [Componentes](#-componentes)
-- [Quick Start](#-quick-start)
-- [Documentación](#-documentación)
-- [Estado del Proyecto](#-estado-del-proyecto)
+- [Descripción General](#descripción-general)
+- [Arquitectura](#arquitectura)
+- [Componentes](#componentes)
+- [Quick Start](#quick-start)
+- [Documentación](#documentación)
+- [Estado del Proyecto](#estado-del-proyecto)
 
 ---
 
-## 🎯 Descripción General
+## Descripción General
 
 Este subsistema permite:
-- 📡 **Telemetría en tiempo real** (GPS, temperatura, RPM, batería)
-- 🔌 **Control remoto** de vehículos (encendido/apagado)
-- 🔄 **Reconexión automática** del agente
-- 📊 **Almacenamiento** de historial de rutas
-- 🌐 **Despliegue en la nube** (Render + MongoDB Atlas)
+- Telemetría en tiempo real (GPS, temperatura, RPM, batería)
+- Control remoto de vehículos (encendido/apagado)
+- Reconexión automática del agente
+- Almacenamiento de historial de rutas
+- Despliegue en la nube (Render + MongoDB Atlas)
 
 ---
 
-## 🏗️ Arquitectura
+## Arquitectura
 
 ```
 ┌─────────────────┐     WebSocket      ┌─────────────────┐
@@ -46,13 +46,13 @@ Este subsistema permite:
 ```
 
 **URLs de Producción:**
-- 🌐 **Microservicio IoT:** https://sims-iot-microservice.onrender.com
-- 🌐 **Backend API:** https://sims-backend-api.onrender.com
-- 🌐 **Frontend:** https://frontend-nine-orcin-waqisje40z.vercel.app
+- Microservicio IoT: https://sims-iot-microservice.onrender.com
+- Backend API: https://sims-backend-api.onrender.com
+- Frontend: https://frontend-nine-orcin-waqisje40z.vercel.app
 
 ---
 
-## 📦 Componentes
+## Componentes
 
 ### 1. Servidor FastAPI (`/server`)
 
@@ -88,7 +88,7 @@ Toda la documentación del subsistema IoT organizada por temas.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Para Desarrolladores (Local)
 
@@ -132,7 +132,7 @@ sudo ./install_service.sh
 
 ---
 
-## 📡 API REST del Microservicio
+## API REST del Microservicio
 
 ### Endpoints Públicos (Sin autenticación)
 
@@ -172,7 +172,7 @@ sudo ./install_service.sh
 
 ---
 
-## 🔗 Integración con Laravel
+## Integración con Laravel
 
 El backend Laravel se comunica con el microservicio mediante `VehicleLocationService.php`.
 
@@ -203,13 +203,13 @@ $isOnline = $iotService->healthCheck();
 
 ---
 
-## 📚 Documentación
+## Documentación
 
-### 🎯 Para Empezar
+### Para Empezar
 
 | Documento | Descripción | Cuándo usarlo |
 |-----------|-------------|---------------|
-| **[Guía Rápida](./docs/QUICKSTART_RASPBERRY.md)** | Instalación paso a paso en Raspberry Pi | ⭐ Primer deploy |
+| **[Guía Rápida](./docs/QUICKSTART_RASPBERRY.md)** | Instalación paso a paso en Raspberry Pi | Primer deploy |
 | **[Guía de Deploy](./docs/DEPLOY_AGENT.md)** | Deploy detallado con todas las opciones | Deploy avanzado |
 
 ### 🔧 Configuración y Uso
@@ -219,7 +219,7 @@ $isOnline = $iotService->healthCheck();
 | **[Guía del Agente](./docs/README_AGENT.md)** | Documentación completa del agente |
 | **[Guía del Servicio](./docs/SERVICE_GUIDE.md)** | Instalación y gestión del servicio systemd |
 
-### 📖 Referencia Técnica
+### Referencia Técnica
 
 | Documento | Descripción |
 |-----------|-------------|
@@ -228,35 +228,35 @@ $isOnline = $iotService->healthCheck();
 
 ---
 
-## 📊 Estado del Proyecto
+## Estado del Proyecto
 
-### ✅ Funcionalidades Completadas
+### Funcionalidades Completadas
 
 **Sprint 4 (Producción):**
-- ✅ Servidor FastAPI desplegado en Render
-- ✅ Agente con reconexión automática
-- ✅ Verificación de internet antes de conectar
-- ✅ Backoff exponencial para reconexiones (5s → 60s)
-- ✅ Servicio systemd mejorado con auto-setup
-- ✅ Configuración dual (producción/local)
-- ✅ Integración completa con Laravel Backend
+- Servidor FastAPI desplegado en Render
+- Agente con reconexión automática
+- Verificación de internet antes de conectar
+- Backoff exponencial para reconexiones (5s → 60s)
+- Servicio systemd mejorado con auto-setup
+- Configuración dual (producción/local)
+- Integración completa con Laravel Backend
 
 **Funcionalidades Core:**
-- ✅ WebSocket con ping/pong para mantener conexión
-- ✅ Transmisión de telemetría (GPS, motor, batería)
-- ✅ Control remoto de actuadores (on/off)
-- ✅ Historial de rutas en MongoDB
-- ✅ Auto-registro de dispositivos
+- WebSocket con ping/pong para mantener conexión
+- Transmisión de telemetría (GPS, motor, batería)
+- Control remoto de actuadores (on/off)
+- Historial de rutas en MongoDB
+- Auto-registro de dispositivos
 
-### 🔜 Próximas Funcionalidades
+### Próximas Funcionalidades
 
-- 🔲 SSL/TLS para WebSocket en producción
-- 🔲 Detección de colisiones (acelerómetro)
-- 🔲 Carcasa protectora para hardware
+- SSL/TLS para WebSocket en producción
+- Detección de colisiones (acelerómetro)
+- Carcasa protectora para hardware
 
 ---
 
-## 🛠️ Stack Tecnológico
+## Stack Tecnológico
 
 | Componente | Tecnología |
 |------------|------------|
