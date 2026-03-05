@@ -148,25 +148,55 @@ async def handle_messages(ws):
         except Exception as e:
             logging.warning(f"Error procesando mensaje: {e}")
 
+async def check_internet():
+    """Verifica si hay conexión a internet"""
+    import socket
+    try:
+        # Intenta conectar a Google DNS
+        socket.create_connection(("8.8.8.8", 53), timeout=3)
+        return True
+    except OSError:
+        return False
+
 async def run():
     if not websockets:
         logging.error("Librería 'websockets' NO instalada. Ejecuta 'pip install websockets'")
         return
+    
     uri = f"{SERVER_WS}/ws/{DEVICE_ID}"
+    retry_delay = 5  # Segundos iniciales entre reintentos
+    max_retry_delay = 60  # Máximo 60 segundos entre reintentos
+    
     while True:
+        # Verificar conexión a internet antes de intentar conectar
+        if not await check_internet():
+            logging.warning("⚠️ Sin conexión a internet. Esperando 10s...")
+            await asyncio.sleep(10)
+            continue
+            
         try:
-            logging.info(f"Conectando a {uri}...")
-            async with websockets.connect(uri) as ws:
+            logging.info(f"🔄 Conectando a {uri}...")
+            async with websockets.connect(uri, ping_interval=20, ping_timeout=10) as ws:
                 logging.info("✅ ¡CONEXIÓN ESTABLECIDA CON EL SERVIDOR!")
+                retry_delay = 5  # Reset del delay al conectar exitosamente
+                
                 # Ejecutar lectura de GPS, envío de estado y escucha de comandos
                 await asyncio.gather(
                     read_gps(),
                     send_status(ws),
                     handle_messages(ws)
                 )
+        except websockets.exceptions.WebSocketException as e:
+            logging.warning(f"❌ Error WebSocket: {e}")
+            logging.info(f"Reintentando en {retry_delay}s...")
+            await asyncio.sleep(retry_delay)
+            # Backoff exponencial hasta max_retry_delay
+            retry_delay = min(retry_delay * 1.5, max_retry_delay)
         except Exception as e:
-            logging.warning(f"Conexión perdida: {e}. Reintentando en 5s...")
-            await asyncio.sleep(5)
+            logging.warning(f"❌ Conexión perdida: {e}")
+            logging.info(f"Reintentando en {retry_delay}s...")
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 1.5, max_retry_delay)
 
 if __name__ == '__main__':
     try:
