@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: sims-iot-microservice
+    env: docker
+    dockerContext: ./server
+    plan: free # Capa gratuita de Render
+    envVars:
+      - key: IOT_API_KEY
+        fromContext: secret
+      - key: OPENAI_API_KEY # Por si lo usa tu chatbot
+        fromContext: secret
+      - key: MONGODB_URI
+        fromContext: secret
+      - key: MONGODB_DATABASE
+        value: cluster-iot

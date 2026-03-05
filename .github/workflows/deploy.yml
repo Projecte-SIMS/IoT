@@ -1,0 +1,15 @@
+name: Deploy IoT Microservice to Render
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Raspberry_py/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Deploy via Render Webhook
+        run: |
+          curl -X POST ${{ secrets.RENDER_IOT_WEBHOOK_URL }}
