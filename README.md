@@ -92,11 +92,24 @@ Toda la documentación del subsistema IoT organizada por temas.
 
 ### Para Desarrolladores (Local)
 
+**Requisitos:**
+- Docker y Docker Compose
+- Python 3.9 o superior (para desarrollo local)
+- Cuenta en MongoDB Atlas o instancia local de MongoDB
+
+**Ejecución:**
 ```bash
 # Levantar servidor local
 docker-compose up --build
 
 # El servidor estará en: http://localhost:8001
+```
+
+**Configuración del servidor (.env):**
+```bash
+MONGO_URI=mongodb+srv://usuario:password@cluster.mongodb.net/
+DB_NAME=raspi_db
+API_KEY=TU_CLAVE_SECRETA
 ```
 
 ### Para Raspberry Pi (Producción)
@@ -116,6 +129,77 @@ cd ~/sims-agent
 # 3. (Opcional) Instalar como servicio
 sudo ./install_service.sh
 ```
+
+---
+
+## 📡 API REST del Microservicio
+
+### Endpoints Públicos (Sin autenticación)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/api/devices` | Lista todos los dispositivos registrados |
+| GET | `/api/devices/{device_id}` | Detalle de un dispositivo específico |
+| GET | `/api/ping/{device_id}` | Verifica si un dispositivo está online |
+| GET | `/api/devices/{id}/route` | Historial de ruta de un dispositivo |
+| GET | `/health` | Estado de salud del microservicio |
+
+### Endpoints Protegidos (Requiere API Key)
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| POST | `/api/command` | Envía un comando de control a un dispositivo |
+| POST | `/api/devices/{id}/route/clear` | Elimina el historial de ruta |
+
+**Cabecera requerida:** `x-api-key: TU_CLAVE_SECRETA`
+
+**Ejemplo de comando:**
+```json
+{
+  "device_id": "raspi-xxx",
+  "action": "on",   // Opciones: "on", "off", "reboot"
+  "relay": 0
+}
+```
+
+### WebSocket
+
+| Endpoint | Descripción |
+|----------|-------------|
+| `WS /ws/{hardware_id}` | Conexión para agentes IoT |
+
+**Ver más detalles técnicos en:** [docs/ESTADO_SUBSISTEMA_IOT.md](./docs/ESTADO_SUBSISTEMA_IOT.md)
+
+---
+
+## 🔗 Integración con Laravel
+
+El backend Laravel se comunica con el microservicio mediante `VehicleLocationService.php`.
+
+**Configuración (.env de Laravel):**
+```env
+IOT_MICROSERVICE_URL=https://sims-iot-microservice.onrender.com
+IOT_API_KEY=TU_CLAVE_SECRETA
+IOT_TIMEOUT=5
+```
+
+**Ejemplos de uso:**
+```php
+$iotService = app(VehicleLocationService::class);
+
+// Obtener ubicaciones
+$locations = $iotService->getLocations();
+
+// Controlar dispositivo
+$iotService->turnOn($deviceId);
+$iotService->turnOff($deviceId);
+$iotService->sendCommand($deviceId, 'reboot');
+
+// Verificar disponibilidad
+$isOnline = $iotService->healthCheck();
+```
+
+**Ver documentación completa:** [docs/ESTADO_SUBSISTEMA_IOT.md](./docs/ESTADO_SUBSISTEMA_IOT.md)
 
 ---
 
