@@ -16,9 +16,9 @@ from datetime import datetime
 # Load environment variables from .env file
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongo:27017")
-DB_NAME = os.getenv("DB_NAME", "raspi_db")
-API_KEY = os.getenv("API_KEY", "MACMECMIC")
+MONGO_URI = os.getenv("MONGO_URI", os.getenv("MONGODB_URI", "mongodb://mongo:27017"))
+DB_NAME = os.getenv("DB_NAME", os.getenv("MONGODB_DATABASE", "raspi_db"))
+API_KEY = os.getenv("IOT_API_KEY", os.getenv("API_KEY", "MACMECMIC"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logging.info(f"Connecting to MongoDB at {MONGO_URI}, DB: {DB_NAME}")
