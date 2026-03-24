@@ -203,19 +203,26 @@ async def send_command(cmd: CommandCreate, x_api_key: str = Header(None)):
 # WebSocket for agents
 @app.websocket("/ws/{hardware_id}")
 async def device_ws(websocket: WebSocket, hardware_id: str):
+    # Buscar si ya existe un dispositivo con este hardware_id
     device = await db.vehicle_locations.find_one({"identity.hardware_id": hardware_id})
 
-    if not device:
+    if device:
+        # Si existe, usamos su ID de MongoDB
+        real_id = str(device["_id"])
+    else:
+        # Si no existe, es un dispositivo nuevo. Lo creamos.
         new_doc = {
-            "identity": {"hardware_id": hardware_id, "name": hardware_id, "license_plate": "AUTO-" + hardware_id[-4:]},
+            "identity": {
+                "hardware_id": hardware_id, 
+                "name": hardware_id, 
+                "license_plate": "AUTO-" + hardware_id[-4:]
+            },
             "status": {"online": True, "active": False, "last_update": 0},
             "telemetry": {"latitude": 0.0, "longitude": 0.0, "speed": 0.0, "engine_temp": 0.0, "rpm": 0, "battery_voltage": 0.0},
             "meta": {}
         }
         res = await db.vehicle_locations.insert_one(new_doc)
         real_id = str(res.inserted_id)
-    else:
-        real_id = str(device["_id"])
 
     await manager.connect(real_id, websocket)
     await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": True}})
