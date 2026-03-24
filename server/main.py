@@ -137,6 +137,35 @@ async def update_device(device_id: str, update: DeviceUpdate):
         
     return {"status": "updated"}
 
+@app.delete("/api/devices/{device_id}")
+async def delete_device(device_id: str):
+    try:
+        obj_id = ObjectId(device_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid device ID format")
+        
+    # Check if device exists to get its ID for websocket cleanup
+    device = await db.vehicle_locations.find_one({"_id": obj_id})
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+        
+    # Delete from MongoDB
+    await db.vehicle_locations.delete_one({"_id": obj_id})
+    
+    # Also clean up route history if exists
+    route_history.pop(device_id, None)
+    
+    # Close websocket if active to prevent immediate re-creation via WS loop
+    if device_id in manager.active:
+        ws = manager.active[device_id]
+        try:
+            await ws.close(code=1000, reason="Device deleted from system")
+        except:
+            pass
+        manager.disconnect(device_id)
+        
+    return {"status": "deleted"}
+
 @app.get("/api/ping/{device_id}")
 async def ping_device(device_id: str):
     return {"device_id": device_id, "online": device_id in manager.active}
