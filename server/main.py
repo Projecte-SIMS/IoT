@@ -38,10 +38,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory storage for current session breadcrumbs
-# In a real app, this should be in MongoDB
-route_history: Dict[str, List[Dict[str, Any]]] = {}
-
 # Simple in-memory websocket manager
 class ConnectionManager:
     def __init__(self):
@@ -152,9 +148,6 @@ async def delete_device(device_id: str):
     # Delete from MongoDB
     await db.vehicle_locations.delete_one({"_id": obj_id})
     
-    # Also clean up route history if exists
-    route_history.pop(device_id, None)
-    
     # Close websocket if active to prevent immediate re-creation via WS loop
     if device_id in manager.active:
         ws = manager.active[device_id]
@@ -172,11 +165,24 @@ async def ping_device(device_id: str):
 
 @app.get("/api/devices/{device_id}/route")
 async def get_device_route(device_id: str):
-    return route_history.get(device_id, [])
+    try:
+        obj_id = ObjectId(device_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid device ID format")
+    
+    device = await db.vehicle_locations.find_one({"_id": obj_id}, {"route": 1})
+    if not device:
+        return []
+    return device.get("route", [])
 
 @app.post("/api/devices/{device_id}/route/clear")
 async def clear_device_route(device_id: str):
-    route_history[device_id] = []
+    try:
+        obj_id = ObjectId(device_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid device ID format")
+        
+    await db.vehicle_locations.update_one({"_id": obj_id}, {"$set": {"route": []}})
     return {"status": "cleared"}
 
 # API: send command
@@ -227,9 +233,6 @@ async def device_ws(websocket: WebSocket, hardware_id: str):
     await manager.connect(real_id, websocket)
     await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": True}})
     
-    if real_id not in route_history:
-        route_history[real_id] = []
-
     try:
         while True:
             data = await websocket.receive_json()
@@ -243,13 +246,21 @@ async def device_ws(websocket: WebSocket, hardware_id: str):
                 
                 # Append to route history if moving or significant change
                 if lat != 0.0 and lon != 0.0:
-                    route_history[real_id].append({
-                        "lat": lat, "lon": lon, "timestamp": datetime.now().isoformat(),
-                        "speed": gps.get("speed", 0.0)
-                    })
-                    # Keep only last 200 points to avoid memory issues in this simple version
-                    if len(route_history[real_id]) > 200:
-                        route_history[real_id].pop(0)
+                    await db.vehicle_locations.update_one(
+                        {"_id": ObjectId(real_id)},
+                        {
+                            "$push": {
+                                "route": {
+                                    "$each": [{
+                                        "lat": lat, "lon": lon, 
+                                        "timestamp": datetime.now().isoformat(),
+                                        "speed": gps.get("speed", 0.0)
+                                    }],
+                                    "$slice": -200
+                                }
+                            }
+                        }
+                    )
 
                 update_doc = {
                     "meta": meta,

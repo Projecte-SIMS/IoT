@@ -45,9 +45,9 @@ if not DEVICE_ID:
     DEVICE_ID = get_unique_id()
     logging.info(f"Identidad automática generada: {DEVICE_ID}")
 
-SERVER_WS = os.getenv("SERVER_WS", "ws://localhost:8001")
-RELAY0_PIN = int(os.getenv("RELAY0_PIN", "17"))
-GPS_PORT = os.getenv("GPS_PORT", "/dev/ttyS0") # Puerto serie típico en RPi
+SERVER_WS = os.getenv("SERVER_WS")
+RELAY0_PIN = int(os.getenv("RELAY0_PIN"))
+GPS_PORT = os.getenv("GPS_PORT") # Puerto serie típico en RPi
 
 # Inicialización de Relés
 RELAYS = {}
