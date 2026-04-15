@@ -44,7 +44,6 @@ class ConnectionManager:
         self.active: Dict[str, WebSocket] = {}
 
     async def connect(self, device_id: str, websocket: WebSocket):
-        await websocket.accept()
         self.active[device_id] = websocket
 
     def disconnect(self, device_id: str):
@@ -53,11 +52,20 @@ class ConnectionManager:
     async def send_json(self, device_id: str, data: Any):
         ws = self.active.get(device_id)
         if ws:
-            await ws.send_json(data)
-            return True
+            try:
+                await ws.send_json(data)
+                return True
+            except:
+                self.disconnect(device_id)
         return False
 
 manager = ConnectionManager()
+
+# Authentication dependency
+async def verify_token(x_api_key: str = Header(None)):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return x_api_key
 
 # Pydantic models
 class CommandCreate(BaseModel):
@@ -71,16 +79,17 @@ class DeviceUpdate(BaseModel):
 
 # API: devices
 @app.get("/api/devices")
-async def list_devices():
+async def list_devices(token: str = Header(None, alias="x-api-key")):
+    await verify_token(token)
     docs = []
     cursor = db.vehicle_locations.find({})
     async for d in cursor:
         id_str = str(d["_id"])
         docs.append({
             "id": id_str,
-            "name": d["identity"]["name"],
-            "hardware_id": d["identity"]["hardware_id"],
-            "license_plate": d["identity"]["license_plate"],
+            "name": d.get("identity", {}).get("name", "Unknown"),
+            "hardware_id": d.get("identity", {}).get("hardware_id", "Unknown"),
+            "license_plate": d.get("identity", {}).get("license_plate", "Unknown"),
             "online": id_str in manager.active,
             "meta": d.get("meta", {}),
             "telemetry": d.get("telemetry", {}),
@@ -89,7 +98,8 @@ async def list_devices():
     return docs
 
 @app.get("/api/devices/{device_id}")
-async def get_device(device_id: str):
+async def get_device(device_id: str, token: str = Header(None, alias="x-api-key")):
+    await verify_token(token)
     try:
         obj_id = ObjectId(device_id)
     except:
@@ -112,7 +122,8 @@ async def get_device(device_id: str):
     }
 
 @app.put("/api/devices/{device_id}")
-async def update_device(device_id: str, update: DeviceUpdate):
+async def update_device(device_id: str, update: DeviceUpdate, token: str = Header(None, alias="x-api-key")):
+    await verify_token(token)
     try:
         obj_id = ObjectId(device_id)
     except:
@@ -134,7 +145,8 @@ async def update_device(device_id: str, update: DeviceUpdate):
     return {"status": "updated"}
 
 @app.delete("/api/devices/{device_id}")
-async def delete_device(device_id: str):
+async def delete_device(device_id: str, token: str = Header(None, alias="x-api-key")):
+    await verify_token(token)
     try:
         obj_id = ObjectId(device_id)
     except:
@@ -164,7 +176,8 @@ async def ping_device(device_id: str):
     return {"device_id": device_id, "online": device_id in manager.active}
 
 @app.get("/api/devices/{device_id}/route")
-async def get_device_route(device_id: str):
+async def get_device_route(device_id: str, token: str = Header(None, alias="x-api-key")):
+    await verify_token(token)
     try:
         obj_id = ObjectId(device_id)
     except:
@@ -176,7 +189,8 @@ async def get_device_route(device_id: str):
     return device.get("route", [])
 
 @app.post("/api/devices/{device_id}/route/clear")
-async def clear_device_route(device_id: str):
+async def clear_device_route(device_id: str, token: str = Header(None, alias="x-api-key")):
+    await verify_token(token)
     try:
         obj_id = ObjectId(device_id)
     except:
@@ -187,12 +201,12 @@ async def clear_device_route(device_id: str):
 
 # API: send command
 @app.post("/api/command")
-async def send_command(cmd: CommandCreate, x_api_key: str = Header(None)):
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+async def send_command(cmd: CommandCreate, token: str = Header(None, alias="x-api-key")):
+    await verify_token(token)
     
     cmd_doc = cmd.dict()
     cmd_doc["status"] = "pending"
+    cmd_doc["created_at"] = datetime.now().isoformat()
     target_id = str(cmd.device_id)
     
     await db.commands.insert_one(cmd_doc)
@@ -208,7 +222,15 @@ async def send_command(cmd: CommandCreate, x_api_key: str = Header(None)):
 
 # WebSocket for agents
 @app.websocket("/ws/{hardware_id}")
-async def device_ws(websocket: WebSocket, hardware_id: str):
+async def device_ws(websocket: WebSocket, hardware_id: str, token: str = None):
+    # Verify token from query parameter or subprotocol if needed
+    # For simplicity, we'll check it from query param ?token=...
+    if token != API_KEY:
+        await websocket.close(code=1008, reason="Invalid API Key")
+        return
+
+    await websocket.accept()
+
     # Buscar si ya existe un dispositivo con este hardware_id
     device = await db.vehicle_locations.find_one({"identity.hardware_id": hardware_id})
 
@@ -223,15 +245,16 @@ async def device_ws(websocket: WebSocket, hardware_id: str):
                 "name": hardware_id, 
                 "license_plate": "AUTO-" + hardware_id[-4:]
             },
-            "status": {"online": True, "active": False, "last_update": 0},
+            "status": {"online": True, "active": False, "last_update": datetime.now().timestamp()},
             "telemetry": {"latitude": 0.0, "longitude": 0.0, "speed": 0.0, "engine_temp": 0.0, "rpm": 0, "battery_voltage": 0.0},
-            "meta": {}
+            "meta": {},
+            "route": []
         }
         res = await db.vehicle_locations.insert_one(new_doc)
         real_id = str(res.inserted_id)
 
     await manager.connect(real_id, websocket)
-    await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": True}})
+    await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": True, "status.last_update": datetime.now().timestamp()}})
     
     try:
         while True:
@@ -242,7 +265,8 @@ async def device_ws(websocket: WebSocket, hardware_id: str):
                 gps = sensors.get("gps", {})
                 relays = meta.get("relays", {})
                 
-                lat, lon = gps.get("lat", 0.0), gps.get("lon", 0.0)
+                lat = float(gps.get("lat", 0.0))
+                lon = float(gps.get("lon", 0.0))
                 
                 # Append to route history if moving or significant change
                 if lat != 0.0 and lon != 0.0:
@@ -254,9 +278,9 @@ async def device_ws(websocket: WebSocket, hardware_id: str):
                                     "$each": [{
                                         "lat": lat, "lon": lon, 
                                         "timestamp": datetime.now().isoformat(),
-                                        "speed": gps.get("speed", 0.0)
+                                        "speed": float(gps.get("speed", 0.0))
                                     }],
-                                    "$slice": -200
+                                    "$slice": -500 # Keep last 500 points
                                 }
                             }
                         }
@@ -264,21 +288,23 @@ async def device_ws(websocket: WebSocket, hardware_id: str):
 
                 update_doc = {
                     "meta": meta,
-                    "status.active": relays.get("0", False),
-                    "status.last_update": asyncio.get_event_loop().time(),
+                    "status.active": bool(relays.get("0", False)),
+                    "status.last_update": datetime.now().timestamp(),
                     "telemetry.latitude": lat,
                     "telemetry.longitude": lon,
-                    "telemetry.speed": gps.get("speed", 0.0),
-                    "telemetry.engine_temp": sensors.get("engine", {}).get("temp", 0.0),
-                    "telemetry.rpm": sensors.get("engine", {}).get("rpm", 0),
-                    "telemetry.battery_voltage": sensors.get("battery", 0.0)
+                    "telemetry.speed": float(gps.get("speed", 0.0)),
+                    "telemetry.engine_temp": float(sensors.get("engine", {}).get("temp", 0.0)),
+                    "telemetry.rpm": int(sensors.get("engine", {}).get("rpm", 0)),
+                    "telemetry.battery_voltage": float(sensors.get("battery", 0.0))
                 }
                 await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": update_doc})
     except WebSocketDisconnect:
         manager.disconnect(real_id)
-        await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": False}})
-    except Exception:
+        await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": False, "status.last_update": datetime.now().timestamp()}})
+    except Exception as e:
+        logging.error(f"WS Error for {real_id}: {e}")
         manager.disconnect(real_id)
+        await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": False}})
 
 @app.get("/health")
 async def health():

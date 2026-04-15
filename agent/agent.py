@@ -32,6 +32,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 # CONFIGURACIÓN
 DEVICE_ID = os.getenv("DEVICE_ID") or get_unique_id()
 SERVER_WS = os.getenv("SERVER_WS")
+IOT_API_KEY = os.getenv("IOT_API_KEY", "MACMECMIC")
 RELAY_PIN = int(os.getenv("RELAY0_PIN", 17))
 LED_YELLOW_PIN = 20  # Estado: Reservado
 LED_GREEN_PIN = 21   # Estado: En Marcha
@@ -132,12 +133,13 @@ async def handle_messages(ws):
             logging.warning(f"⚠️ Error: {e}")
 
 async def run():
-    uri = f"{SERVER_WS}/ws/{DEVICE_ID}"
+    # Use token in query param for WebSocket handshake
+    uri = f"{SERVER_WS}/ws/{DEVICE_ID}?token={IOT_API_KEY}"
     while True:
         try:
-            logging.info(f"🔄 Conectando a {uri}...")
+            logging.info(f"🔄 Conectando a {SERVER_WS}/ws/{DEVICE_ID}...")
             async with websockets.connect(
-                uri, ping_interval=10, ping_timeout=5, open_timeout=10, compression=None
+                uri, ping_interval=20, ping_timeout=10, open_timeout=15, compression=None
             ) as ws:
                 logging.info("✅ CONECTADO")
                 tasks = [
@@ -150,8 +152,8 @@ async def run():
                 for task in done: 
                     if task.exception(): raise task.exception()
         except Exception as e:
-            logging.warning(f"❌ Error: {e}. Reintentando...")
-            await asyncio.sleep(5)
+            logging.warning(f"❌ Error: {e}. Reintentando en 10s...")
+            await asyncio.sleep(10)
 
 if __name__ == '__main__':
     try:
