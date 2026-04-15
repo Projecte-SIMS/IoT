@@ -1,35 +1,40 @@
 # Documentación del Subsistema de Sensores y Actuadores IoT
 
-**Última actualización:** 2026-03-04
+**Ultima actualización:** 2026-05-15
 
-Esta documentación detalla el estado real del desarrollo del subsistema IoT, cumpliendo con los requisitos de diseño, modelado y funcionalidad.
+Esta documentación detalla el estado actual del desarrollo del subsistema IoT, su arquitectura multitenant y el flujo de datos entre el hardware y el ecosistema SIMS SaaS.
 
 ---
 
-## 1. Diagrama de Diseño del Subsistema
+## 1. Arquitectura del Sistema y Flujo de Datos
 
-El diseño actual sigue una arquitectura de estrella centralizada con comunicación asíncrona:
+El diseño sigue una arquitectura de estrella centralizada donde el microservicio IoT (FastAPI) actúa como un puente global de comunicaciones entre el hardware físico y la infraestructura multitenant de Laravel.
 
 ```
-┌─────────────────┐     WebSocket      ┌─────────────────┐
-│  Raspberry Pi   │ ◄───────────────► │  FastAPI Server │◄──── MongoDB Atlas
-│    (Agentes)    │    Telemetría      │   (Puerto 8001) │
-└─────────────────┘    + Comandos      └────────┬────────┘
-                                                │
-                                                │ HTTP REST + API Key
-                                                │
-                                       ┌────────▼────────┐
-                                       │  Laravel Backend │
-                                       │   (Puerto 8000)  │
-                                       └─────────────────┘
+┌───────────────────┐     WebSocket      ┌───────────────────┐
+│   Raspberry Pi    │ <────────────────> │  FastAPI Microserv│ <─── MongoDB Atlas
+│     (Agentes)     │    Telemetría      │   (Microservicio) │
+└───────────────────┘    + Comandos      └────────┬──────────┘
+                                                  │
+                                                  │ HTTP REST + API Key
+                                                  │ (Validación de Hardware ID)
+                                                  │
+                                         ┌────────▼──────────┐
+                                         │  Laravel Backend  │
+                                         │   (Multitenant)   │
+                                         └────────┬──────────┘
+                                                  │
+                                         ┌────────┴──────────┐
+                                         │ Tenant DB Schemas │
+                                         │ (Postgres/Oracle) │
+                                         └───────────────────┘
 ```
 
-**Componentes:**
-- **Nodo Local (Raspberry Pi):** Agente Python que gestiona GPIO (relés) y lectura de sensores (GPS).
-- **Servidor de Control (FastAPI):** Broker de mensajes WebSocket y API REST.
-- **Base de Datos (MongoDB):** Almacenamiento del estado persistente y telemetría.
-
-**Estado:** Aprobado y operativo.
+### Flujo de Datos IoT-Multitenant:
+1.  **Origen de Datos:** La Raspberry Pi envía telemetría cada 5 segundos al Servidor FastAPI mediante WebSockets persistentes, identificándose con su `hardware_id`.
+2.  **Persistencia Global:** FastAPI almacena estos datos en un MongoDB centralizado. Este microservicio no conoce a qué tenant pertenece el vehículo; solo gestiona identidades de hardware.
+3.  **Aislamiento de Negocio:** El Backend de Laravel mantiene en el esquema de cada tenant (ej: `tenant_empresa_a`) la relación entre un vehículo y un `hardware_id`.
+4.  **Consumo de Datos:** Cuando un usuario de un tenant solicita la ubicación de su flota, Laravel consulta sus propios esquemas para obtener los IDs de hardware permitidos y realiza peticiones firmadas al microservicio IoT para recuperar exclusivamente esos datos.
 
 ---
 
@@ -79,17 +84,17 @@ Colección: `vehicle_locations`
 | Estado del Motor | RPM y temperatura (simulada o real según hardware) | Completado |
 | Auto-registro | Los dispositivos se registran automáticamente al conectar | Completado |
 | Control Remoto | Capacidad para encender y apagar vehículos a distancia | Completado |
-| Historial de Rutas | Almacenamiento de los últimos 200 puntos GPS | Completado |
+| Historial de Rutas | Almacenamiento de series temporales de coordenadas | Completado |
 | WebSocket Bidireccional | Envío de telemetría y recepción de comandos en tiempo real | Completado |
-| Reconexión Automática | El agente reintenta la conexión si se pierde el enlace | Completado |
+| Reconexión Automática | Gestión de resiliencia ante pérdida de enlace | Completado |
 
 ### Pendientes
 
 | Funcionalidad | Descripción | Prioridad |
 |---------------|-------------|-----------|
-| SSL/TLS WebSocket | Cifrado de comunicaciones en entorno de producción | Media |
-| Acelerómetro | Implementación de detección automática de colisiones | Baja |
-| Carcasa Protectora | Diseño de hardware adaptado para automoción | Baja |
+| SSL/TLS WebSocket | Cifrado de comunicaciones en producción | Media |
+| Acelerómetro | Detección automática de colisiones | Baja |
+| Carcasa Protectora | Diseño industrial adaptado para automoción | Baja |
 
 ---
 
@@ -98,144 +103,72 @@ Colección: `vehicle_locations`
 El control de encendido y apagado se realiza mediante un relé de potencia conectado a la Raspberry Pi.
 
 ### Hardware
-- **Pin GPIO:** 17 (configurable mediante la variable `RELAY0_PIN`).
-- **Librería utilizada:** `gpiozero` (incluye un `MockRelay` para pruebas en sistemas sin GPIO).
+- **Pin GPIO:** 17 (configurable mediante `RELAY0_PIN`).
+- **Librería:** `gpiozero`.
 
-### Flujo de Ejecución de un Comando
+### Flujo de Ejecución Multitenant de un Comando
 
-1. El administrador envía una petición `POST /api/admin/iot/devices/{id}/on` desde el backend de Laravel.
-2. Laravel invoca el método `turnOn()` de la clase `VehicleLocationService`.
-3. El servicio envía una petición `POST /api/command` al microservicio FastAPI con la API Key correspondiente.
-4. FastAPI transmite el comando a través del WebSocket activo hacia el agente de la Raspberry Pi.
-5. El agente conmuta el pin GPIO y devuelve una confirmación (ACK) al servidor.
-6. El estado se actualiza en la base de datos MongoDB (`status.active = true`).
-7. Laravel recibe la confirmación final de la operación.
-
-### Ejemplo de código del Agente
-
-```python
-# agent/agent.py
-if action == "on":
-    RELAYS[relay_idx].on()
-elif action == "off":
-    RELAYS[relay_idx].off()
-
-# Envío de confirmación de estado
-ack = {"type": "ack", "payload": {"relay": relay_idx, "state": r.is_active}}
-await ws.send(json.dumps(ack))
-```
+1. Un administrador autenticado en un tenant envía una petición `POST /api/admin/iot/devices/{id}/on`.
+2. Laravel verifica que el `{id}` pertenezca al esquema del tenant actual.
+3. Laravel invoca el método `turnOn()` de `VehicleLocationService`.
+4. El servicio envía una petición `POST /api/command` al microservicio FastAPI autenticada con la API Key global.
+5. FastAPI transmite el comando mediante el WebSocket asociado al `hardware_id`.
+6. El agente de la Raspberry Pi conmuta el pin GPIO y devuelve un ACK.
+7. El estado se actualiza en MongoDB y se propaga al frontend del tenant.
 
 ---
 
-## 5. Telemetría del Agente
-
-El agente está configurado para enviar datos de sus sensores cada 5 segundos:
-
-```python
-payload = {
-    "type": "status",
-    "meta": {
-        "device_name": DEVICE_ID,
-        "relays": {str(k): RELAYS[k].is_active for k in RELAYS},
-        "sensors": {
-            "gps": {"lat": lat, "lon": lon, "speed": speed},
-            "engine": {"temp": temp, "rpm": rpm},
-            "battery": voltage
-        }
-    }
-}
-await ws.send(json.dumps(payload))
-```
-
----
-
-## 6. Integración entre Laravel y FastAPI
+## 5. Integración entre Laravel y FastAPI
 
 ### Servicio de comunicación: VehicleLocationService.php
 
-El backend de Laravel interactúa con el microservicio mediante los siguientes métodos:
+El backend de Laravel actúa como el orquestador que dota de contexto de negocio a los datos IoT:
 
-- **getLocations():** Obtiene las ubicaciones de todos los vehículos activos.
-- **getAllDevices():** Recupera la lista completa de dispositivos.
-- **getDevice(string $deviceId):** Obtiene los detalles de un dispositivo específico.
-- **sendCommand(string $deviceId, string $action, int $relay = 0):** Envía un comando (on, off o reboot).
-- **turnOn(string $deviceId) / turnOff(string $deviceId):** Métodos abreviados para el control de encendido.
-- **healthCheck():** Verifica el estado de salud del microservicio.
-- **isDeviceOnline(string $deviceId):** Comprueba si un dispositivo está conectado actualmente.
-- **updateDevicePlate(string $deviceId, string $licensePlate):** Vincula un dispositivo a una matrícula específica.
+- **getLocations():** Recupera ubicaciones de los dispositivos permitidos para el tenant actual.
+- **getAllDevices():** Listado global limitado a administradores centrales.
+- **sendCommand(string $deviceId, string $action, int $relay = 0):** Puente de comandos hacia FastAPI.
+- **healthCheck():** Monitorización de disponibilidad del microservicio.
+- **updateDevicePlate(string $deviceId, string $licensePlate):** Sincronización de metadatos entre el esquema del tenant y el microservicio IoT.
 
-### Endpoints definidos en Laravel (IoTController.php)
+### Endpoints en Laravel (IoTController.php)
 
-Rutas para usuarios autenticados:
-- `GET /api/iot/health`: Comprobación de estado.
-- `GET /api/iot/devices`: Listado de dispositivos.
-- `GET /api/iot/devices/{id}`: Detalle de dispositivo.
-- `GET /api/iot/devices/{id}/ping`: Verificación de conexión online.
-- `GET /api/iot/logs`: Historial de comandos ejecutados.
+Rutas para usuarios de inquilino (Tenant-Aware):
+- `GET /api/iot/health`: Estado del subsistema.
+- `GET /api/iot/devices`: Dispositivos del inquilino.
+- `GET /api/iot/devices/{id}`: Telemetría en tiempo real.
+- `GET /api/iot/logs`: Auditoría de comandos del inquilino.
 
-Rutas exclusivas para administradores:
-- `POST /api/admin/iot/devices/{id}/on`: Encendido remoto.
-- `POST /api/admin/iot/devices/{id}/off`: Apagado remoto.
-- `POST /api/admin/iot/devices/{id}/command`: Envío de comando genérico.
-- `POST /api/admin/iot/devices/{id}/link`: Vinculación a un vehículo.
-- `GET /api/admin/iot/devices/unlinked`: Dispositivos pendientes de vinculación.
-- `GET /api/admin/iot/vehicles/available`: Lista de vehículos disponibles.
+Rutas de Administración Central (SuperAdmin):
+- `POST /api/admin/iot/devices/{id}/link`: Vinculación de un dispositivo nuevo a un tenant específico.
+- `GET /api/admin/iot/devices/unlinked`: Dispositivos en stock sin asignar a ningún cliente SaaS.
 
 ---
 
-## 7. Registro de Comandos (CommandLog)
+## 6. Registro de Comandos y Auditoría
 
-Todas las acciones de control realizadas por los usuarios se registran en la base de datos PostgreSQL de Laravel para auditoría:
+Todas las acciones de control se registran en la base de datos PostgreSQL del inquilino correspondiente para garantizar la trazabilidad por organización:
 
 ```php
-// app/Models/CommandLog.php
+// Registro en el esquema del inquilino
 CommandLog::create([
     'user_id' => auth()->id(),
     'device_id' => $deviceId,
     'action' => 'on',
-    'payload' => [],
-    'status' => 'sent', // Estados: 'sent' o 'failed'
+    'status' => 'sent',
 ]);
 ```
 
 ---
 
-## 8. Configuración del Sistema
-
-### Servidor FastAPI (.env)
-```env
-MONGO_URI=mongodb+srv://usuario:password@cluster.mongodb.net/
-DB_NAME=raspi_db
-API_KEY=TU_CLAVE_SECRETA
-```
-
-### Agente Raspberry Pi (.env)
-```env
-SERVER_WS=ws://192.168.1.100:8001
-DEVICE_ID=Camion-01
-RELAY0_PIN=17
-GPS_PORT=/dev/ttyS0
-```
-
----
-
-## 9. Medidas de Seguridad
+## 7. Seguridad y Aislamiento
 
 | Medida | Descripción |
 |--------|----------------|
-| API Key | Uso obligatorio del header `x-api-key` para el envío de comandos |
-| Gestión de Secretos | Uso de archivos `.env` para evitar credenciales en el código fuente |
-| Validación de Datos | Implementación de esquemas Pydantic para validar entradas |
-| Aislamiento de BD | El acceso a MongoDB está restringido exclusivamente a FastAPI |
+| API Key Global | Autenticación entre el backend de Laravel y el microservicio FastAPI |
+| Aislamiento SaaS | Laravel actúa como filtro obligatorio; el microservicio IoT no expone datos directamente a los usuarios finales |
+| Esquemas de Tenant | Los metadatos de los dispositivos están físicamente aislados por inquilino en PostgreSQL |
+| Validación Pydantic | Validación de integridad en la ingesta de telemetría en FastAPI |
 
 ---
 
-## 10. Próximos Pasos
-
-1. Implementar SSL/TLS para asegurar las comunicaciones por WebSocket.
-2. Integrar la lectura de acelerómetros para mejorar la seguridad del vehículo.
-3. Finalizar el diseño de la carcasa para protección del hardware en entornos reales.
-
----
-
-*Documento preparado para la revisión del Sprint 5.*
+*Documentación técnica preparada para el cierre del Sprint 5.*
