@@ -78,11 +78,11 @@ class DeviceUpdate(BaseModel):
     name: str = None
 
 # API: devices
-@app.get("/api/devices")
-async def list_devices(token: str = Header(None, alias="x-api-key")):
+@app.get("/api/{tenant_id}/devices")
+async def list_devices(tenant_id: str, token: str = Header(None, alias="x-api-key")):
     await verify_token(token)
     docs = []
-    cursor = db.vehicle_locations.find({})
+    cursor = db.vehicle_locations.find({"tenant_id": tenant_id})
     async for d in cursor:
         id_str = str(d["_id"])
         docs.append({
@@ -97,15 +97,15 @@ async def list_devices(token: str = Header(None, alias="x-api-key")):
         })
     return docs
 
-@app.get("/api/devices/{device_id}")
-async def get_device(device_id: str, token: str = Header(None, alias="x-api-key")):
+@app.get("/api/{tenant_id}/devices/{device_id}")
+async def get_device(tenant_id: str, device_id: str, token: str = Header(None, alias="x-api-key")):
     await verify_token(token)
     try:
         obj_id = ObjectId(device_id)
     except:
         raise HTTPException(status_code=400, detail="Invalid device ID format")
         
-    device = await db.vehicle_locations.find_one({"_id": obj_id})
+    device = await db.vehicle_locations.find_one({"_id": obj_id, "tenant_id": tenant_id})
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
         
@@ -121,8 +121,8 @@ async def get_device(device_id: str, token: str = Header(None, alias="x-api-key"
         "status": device.get("status", {})
     }
 
-@app.put("/api/devices/{device_id}")
-async def update_device(device_id: str, update: DeviceUpdate, token: str = Header(None, alias="x-api-key")):
+@app.put("/api/{tenant_id}/devices/{device_id}")
+async def update_device(tenant_id: str, device_id: str, update: DeviceUpdate, token: str = Header(None, alias="x-api-key")):
     await verify_token(token)
     try:
         obj_id = ObjectId(device_id)
@@ -135,7 +135,7 @@ async def update_device(device_id: str, update: DeviceUpdate, token: str = Heade
         update_data["identity.name"] = update.name
         
     result = await db.vehicle_locations.update_one(
-        {"_id": obj_id},
+        {"_id": obj_id, "tenant_id": tenant_id},
         {"$set": update_data}
     )
     
@@ -144,8 +144,8 @@ async def update_device(device_id: str, update: DeviceUpdate, token: str = Heade
         
     return {"status": "updated"}
 
-@app.delete("/api/devices/{device_id}")
-async def delete_device(device_id: str, token: str = Header(None, alias="x-api-key")):
+@app.delete("/api/{tenant_id}/devices/{device_id}")
+async def delete_device(tenant_id: str, device_id: str, token: str = Header(None, alias="x-api-key")):
     await verify_token(token)
     try:
         obj_id = ObjectId(device_id)
@@ -153,12 +153,12 @@ async def delete_device(device_id: str, token: str = Header(None, alias="x-api-k
         raise HTTPException(status_code=400, detail="Invalid device ID format")
         
     # Check if device exists to get its ID for websocket cleanup
-    device = await db.vehicle_locations.find_one({"_id": obj_id})
+    device = await db.vehicle_locations.find_one({"_id": obj_id, "tenant_id": tenant_id})
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
         
     # Delete from MongoDB
-    await db.vehicle_locations.delete_one({"_id": obj_id})
+    await db.vehicle_locations.delete_one({"_id": obj_id, "tenant_id": tenant_id})
     
     # Close websocket if active to prevent immediate re-creation via WS loop
     if device_id in manager.active:
@@ -171,40 +171,61 @@ async def delete_device(device_id: str, token: str = Header(None, alias="x-api-k
         
     return {"status": "deleted"}
 
-@app.get("/api/ping/{device_id}")
-async def ping_device(device_id: str):
+@app.get("/api/{tenant_id}/ping/{device_id}")
+async def ping_device(tenant_id: str, device_id: str):
+    # Verify device belongs to tenant
+    try:
+        obj_id = ObjectId(device_id)
+    except:
+        return {"device_id": device_id, "online": False, "error": "Invalid ID"}
+        
+    device = await db.vehicle_locations.find_one({"_id": obj_id, "tenant_id": tenant_id})
+    if not device:
+        return {"device_id": device_id, "online": False, "error": "Device not found for this tenant"}
+        
     return {"device_id": device_id, "online": device_id in manager.active}
 
-@app.get("/api/devices/{device_id}/route")
-async def get_device_route(device_id: str, token: str = Header(None, alias="x-api-key")):
+@app.get("/api/{tenant_id}/devices/{device_id}/route")
+async def get_device_route(tenant_id: str, device_id: str, token: str = Header(None, alias="x-api-key")):
     await verify_token(token)
     try:
         obj_id = ObjectId(device_id)
     except:
         raise HTTPException(status_code=400, detail="Invalid device ID format")
     
-    device = await db.vehicle_locations.find_one({"_id": obj_id}, {"route": 1})
+    device = await db.vehicle_locations.find_one({"_id": obj_id, "tenant_id": tenant_id}, {"route": 1})
     if not device:
         return []
     return device.get("route", [])
 
-@app.post("/api/devices/{device_id}/route/clear")
-async def clear_device_route(device_id: str, token: str = Header(None, alias="x-api-key")):
+@app.post("/api/{tenant_id}/devices/{device_id}/route/clear")
+async def clear_device_route(tenant_id: str, device_id: str, token: str = Header(None, alias="x-api-key")):
     await verify_token(token)
     try:
         obj_id = ObjectId(device_id)
     except:
         raise HTTPException(status_code=400, detail="Invalid device ID format")
         
-    await db.vehicle_locations.update_one({"_id": obj_id}, {"$set": {"route": []}})
+    await db.vehicle_locations.update_one({"_id": obj_id, "tenant_id": tenant_id}, {"$set": {"route": []}})
     return {"status": "cleared"}
 
 # API: send command
-@app.post("/api/command")
-async def send_command(cmd: CommandCreate, token: str = Header(None, alias="x-api-key")):
+@app.post("/api/{tenant_id}/command")
+async def send_command(tenant_id: str, cmd: CommandCreate, token: str = Header(None, alias="x-api-key")):
     await verify_token(token)
     
+    # Verify device belongs to tenant
+    try:
+        obj_id = ObjectId(cmd.device_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid device ID format")
+        
+    device = await db.vehicle_locations.find_one({"_id": obj_id, "tenant_id": tenant_id})
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found for this tenant")
+
     cmd_doc = cmd.dict()
+    cmd_doc["tenant_id"] = tenant_id
     cmd_doc["status"] = "pending"
     cmd_doc["created_at"] = datetime.now().isoformat()
     target_id = str(cmd.device_id)
@@ -216,13 +237,13 @@ async def send_command(cmd: CommandCreate, token: str = Header(None, alias="x-ap
 
     sent = await manager.send_json(target_id, {"type": "command", "payload": cmd_doc})
     if sent:
-        await db.commands.update_many({"device_id": cmd.device_id, "status": "pending"}, {"$set": {"status": "sent"}})
+        await db.commands.update_many({"device_id": cmd.device_id, "status": "pending", "tenant_id": tenant_id}, {"$set": {"status": "sent"}})
         return {"result": "sent"}
     return {"result": "queued"}
 
 # WebSocket for agents
-@app.websocket("/ws/{hardware_id}")
-async def device_ws(websocket: WebSocket, hardware_id: str, token: str = None):
+@app.websocket("/ws/{tenant_id}/{hardware_id}")
+async def device_ws(websocket: WebSocket, tenant_id: str, hardware_id: str, token: str = None):
     # Verify token from query parameter or subprotocol if needed
     # For simplicity, we'll check it from query param ?token=...
     if token != API_KEY:
@@ -231,15 +252,19 @@ async def device_ws(websocket: WebSocket, hardware_id: str, token: str = None):
 
     await websocket.accept()
 
-    # Buscar si ya existe un dispositivo con este hardware_id
-    device = await db.vehicle_locations.find_one({"identity.hardware_id": hardware_id})
+    # Buscar si ya existe un dispositivo con este hardware_id Y este tenant_id
+    device = await db.vehicle_locations.find_one({
+        "identity.hardware_id": hardware_id,
+        "tenant_id": tenant_id
+    })
 
     if device:
         # Si existe, usamos su ID de MongoDB
         real_id = str(device["_id"])
     else:
-        # Si no existe, es un dispositivo nuevo. Lo creamos.
+        # Si no existe, es un dispositivo nuevo. Lo creamos vinculado al tenant.
         new_doc = {
+            "tenant_id": tenant_id,
             "identity": {
                 "hardware_id": hardware_id, 
                 "name": hardware_id, 

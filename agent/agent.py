@@ -31,8 +31,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 # CONFIGURACIÓN
 DEVICE_ID = os.getenv("DEVICE_ID") or get_unique_id()
+TENANT_ID = os.getenv("TENANT_ID", "default")
 SERVER_WS = os.getenv("SERVER_WS")
-IOT_API_KEY = os.getenv("IOT_API_KEY", "MACMECMIC")
+IOT_API_KEY = os.getenv("DEVICE_TOKEN") or os.getenv("IOT_API_KEY", "MACMECMIC")
 RELAY_PIN = int(os.getenv("RELAY0_PIN", 17))
 LED_YELLOW_PIN = 20  # Estado: Reservado
 LED_GREEN_PIN = 21   # Estado: En Marcha
@@ -134,10 +135,11 @@ async def handle_messages(ws):
 
 async def run():
     # Use token in query param for WebSocket handshake
-    uri = f"{SERVER_WS}/ws/{DEVICE_ID}?token={IOT_API_KEY}"
+    # wss://iot-server.com/ws/feetly/AUTO-001?token=...
+    uri = f"{SERVER_WS}/ws/{TENANT_ID}/{DEVICE_ID}?token={IOT_API_KEY}"
     while True:
         try:
-            logging.info(f"🔄 Conectando a {SERVER_WS}/ws/{DEVICE_ID}...")
+            logging.info(f"🔄 Conectando a {SERVER_WS}/ws/{TENANT_ID}/{DEVICE_ID}...")
             async with websockets.connect(
                 uri, ping_interval=20, ping_timeout=10, open_timeout=15, compression=None
             ) as ws:
