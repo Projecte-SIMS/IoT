@@ -56,7 +56,52 @@ IOT_API_KEY=MACMECMIC
 
 ---
 
-## Documentación Adicional
+## Gestión de Flota y Despliegue Masivo
+
+Para facilitar el despliegue en múltiples dispositivos y garantizar actualizaciones sencillas, hemos implementado el **SIMS Fleet Manager**.
+
+### 🚀 Despliegue con Fleet Manager
+
+1.  **Configurar Inventario:** Edita el archivo `inventory.json` con la lista de tus Raspberry Pi:
+    ```json
+    [
+      {
+        "id": "AUTO-001",
+        "ip": "192.168.1.100",
+        "user": "pi",
+        "tenant_id": "feetly",
+        "api_key": "TU_KEY_SEGURA",
+        "use_docker": true
+      }
+    ]
+    ```
+
+2.  **Comandos Principales:**
+    - **Desplegar/Actualizar Software:** Envía el código más reciente y reinicia el agente.
+      ```bash
+      python3 fleet_manager.py deploy
+      ```
+    - **Ver Estado:** Comprueba si los agentes están corriendo.
+      ```bash
+      python3 fleet_manager.py status
+      ```
+    - **Actualizar Keys:** Si hay una filtración, actualiza la `IOT_API_KEY` en todos los dispositivos al instante.
+      ```bash
+      python3 fleet_manager.py update-keys
+      ```
+    - **Reiniciar Dispositivos:**
+      ```bash
+      python3 fleet_manager.py reboot
+      ```
+
+### 🐳 Despliegue con Docker (Recomendado)
+
+El agente ahora soporta Docker para un entorno aislado y consistente:
+- **Archivo:** `agent/docker-compose.yml`
+- **Ventaja:** No requiere instalar dependencias manualmente en la Raspberry. Todo lo necesario viene en la imagen.
+
+---
+
 
 - [**Guía Rápida Raspberry Pi**](./docs/QUICKSTART_RASPBERRY.md) - Configuración inicial de hardware.
 - [**Manual del Agente**](./docs/README_AGENT.md) - Especificaciones del script de telemetría.

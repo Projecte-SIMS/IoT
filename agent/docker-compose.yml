@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  agent:
+    build: .
+    container_name: sims-iot-agent
+    restart: always
+    privileged: true # Necesario para acceder a los pines GPIO
+    volumes:
+      - /dev:/dev
+      - ./.env:/app/.env
+    # El archivo .env contendrá DEVICE_ID, TENANT_ID, SERVER_WS, IOT_API_KEY, etc.
