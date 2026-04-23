@@ -42,12 +42,29 @@ app.add_middleware(
 class ConnectionManager:
     def __init__(self):
         self.active: Dict[str, WebSocket] = {}
+        self.hardware_to_id: Dict[str, str] = {}
 
-    async def connect(self, device_id: str, websocket: WebSocket):
+    async def connect(self, device_id: str, hardware_id: str, websocket: WebSocket):
         self.active[device_id] = websocket
+        self.hardware_to_id[hardware_id] = device_id
 
     def disconnect(self, device_id: str):
         self.active.pop(device_id, None)
+        # Limpiar hardware_to_id (reverso)
+        self.hardware_to_id = {k: v for k, v in self.hardware_to_id.items() if v != device_id}
+
+    def is_online(self, device_id: str = None, hardware_id: str = None) -> bool:
+        # Check by device_id (exact match in active sessions)
+        if device_id and device_id in self.active:
+            return True
+            
+        # Check by hardware_id (lookup in our hardware map)
+        if hardware_id:
+            hid = self.hardware_to_id.get(hardware_id)
+            if hid and hid in self.active:
+                return True
+                
+        return False
 
     async def send_json(self, device_id: str, data: Any):
         ws = self.active.get(device_id)
@@ -76,6 +93,58 @@ class CommandCreate(BaseModel):
 class DeviceUpdate(BaseModel):
     license_plate: str
     name: str = None
+
+# API: global devices for central admin
+@app.get("/api/central/devices")
+async def list_all_devices(only_online: bool = False, token: str = Header(None, alias="x-api-key")):
+    try:
+        logging.info(f"SuperAdmin request received with token: {token[:3] if token else 'None'}... (Only Online: {only_online})")
+        await verify_token(token)
+        
+        docs = []
+        db_hardware_ids = set()
+        
+        # 1. Obtener dispositivos de la DB
+        cursor = db.vehicle_locations.find({})
+        async for d in cursor:
+            id_str = str(d["_id"])
+            hw_id = d.get("identity", {}).get("hardware_id")
+            if hw_id:
+                db_hardware_ids.add(hw_id)
+            
+            is_online = manager.is_online(device_id=id_str, hardware_id=hw_id)
+            
+            if only_online and not is_online:
+                continue
+                
+            identity = d.get("identity", {})
+            docs.append({
+                "id": id_str,
+                "tenant_id": d.get("tenant_id", "unknown"),
+                "name": identity.get("name", "Unknown"),
+                "hardware_id": hw_id or "S/N",
+                "ip_address": d.get("status", {}).get("ip_address", "Unknown"),
+                "online": is_online,
+                "active": d.get("status", {}).get("active", False)
+            })
+        
+        # 2. Añadir dispositivos que están en memoria (WS) pero NO en la lista de la DB anterior
+        for hw_id, device_id in manager.hardware_to_id.items():
+            if hw_id not in db_hardware_ids:
+                docs.append({
+                    "id": device_id,
+                    "tenant_id": "WS_ONLY",
+                    "name": "Dispositivo Volátil",
+                    "hardware_id": hw_id,
+                    "ip_address": "Unknown",
+                    "online": True
+                })
+        
+        logging.info(f"Total devices returned: {len(docs)}. Active WebSockets: {len(manager.active)}")
+        return docs
+    except Exception as e:
+        logging.error(f"Error in list_all_devices: {str(e)}")
+        return {"error": str(e), "trace": "Check server logs"}
 
 # API: devices
 @app.get("/api/{tenant_id}/devices")
@@ -244,25 +313,23 @@ async def send_command(tenant_id: str, cmd: CommandCreate, token: str = Header(N
 # WebSocket for agents
 @app.websocket("/ws/{tenant_id}/{hardware_id}")
 async def device_ws(websocket: WebSocket, tenant_id: str, hardware_id: str, token: str = None):
-    # Verify token from query parameter or subprotocol if needed
-    # For simplicity, we'll check it from query param ?token=...
+    # Verify token
     if token != API_KEY:
         await websocket.close(code=1008, reason="Invalid API Key")
         return
 
     await websocket.accept()
+    client_ip = websocket.client.host
 
-    # Buscar si ya existe un dispositivo con este hardware_id Y este tenant_id
+    # Buscar si ya existe
     device = await db.vehicle_locations.find_one({
         "identity.hardware_id": hardware_id,
         "tenant_id": tenant_id
     })
 
     if device:
-        # Si existe, usamos su ID de MongoDB
         real_id = str(device["_id"])
     else:
-        # Si no existe, es un dispositivo nuevo. Lo creamos vinculado al tenant.
         new_doc = {
             "tenant_id": tenant_id,
             "identity": {
@@ -270,7 +337,7 @@ async def device_ws(websocket: WebSocket, tenant_id: str, hardware_id: str, toke
                 "name": hardware_id, 
                 "license_plate": "AUTO-" + hardware_id[-4:]
             },
-            "status": {"online": True, "active": False, "last_update": datetime.now().timestamp()},
+            "status": {"online": True, "active": False, "last_update": datetime.now().timestamp(), "ip_address": client_ip},
             "telemetry": {"latitude": 0.0, "longitude": 0.0, "speed": 0.0, "engine_temp": 0.0, "rpm": 0, "battery_voltage": 0.0},
             "meta": {},
             "route": []
@@ -278,8 +345,15 @@ async def device_ws(websocket: WebSocket, tenant_id: str, hardware_id: str, toke
         res = await db.vehicle_locations.insert_one(new_doc)
         real_id = str(res.inserted_id)
 
-    await manager.connect(real_id, websocket)
-    await db.vehicle_locations.update_one({"_id": ObjectId(real_id)}, {"$set": {"status.online": True, "status.last_update": datetime.now().timestamp()}})
+    await manager.connect(real_id, hardware_id, websocket)
+    await db.vehicle_locations.update_one(
+        {"_id": ObjectId(real_id)}, 
+        {"$set": {
+            "status.online": True, 
+            "status.last_update": datetime.now().timestamp(),
+            "status.ip_address": client_ip
+        }}
+    )
     
     try:
         while True:
