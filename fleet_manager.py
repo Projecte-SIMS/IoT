@@ -77,13 +77,64 @@ def deploy_agent(device):
     print(f"✅ Despliegue completado en {device['id']}")
     return True
 
+def get_local_hw_id():
+    """Detecta ID de hardware localmente (Raspberry Serial o UUID)"""
+    try:
+        with open('/proc/cpuinfo', 'r') as f:
+            for line in f:
+                if line.startswith('Serial'):
+                    return f"raspi-{line.split(':')[1].strip()}"
+    except: pass
+    import uuid
+    return f"device-{hex(uuid.getnode())[2:]}"
+
+def auto_deploy_local():
+    """Despliegue automático en la máquina actual detectando hardware"""
+    hw_id = get_local_hw_id()
+    print(f"🕵️ Detectado hardware: {hw_id}")
+    
+    device = {
+        "id": hw_id,
+        "ip": "localhost",
+        "user": os.getlogin(),
+        "tenant_id": "default",
+        "api_key": "MACMECMIC",
+        "use_docker": os.path.exists("/var/run/docker.sock")
+    }
+    
+    # 1. Crear .env local
+    env_content = [
+        f"DEVICE_ID={device['id']}",
+        f"TENANT_ID={device['tenant_id']}",
+        f"SERVER_WS=ws://localhost:8001",
+        f"IOT_API_KEY={device['api_key']}",
+        f"RELAY0_PIN=17"
+    ]
+    
+    with open(AGENT_DIR / ".env", "w") as f:
+        f.write("\n".join(env_content))
+    
+    print(f"📝 Configurado .env para {hw_id}")
+    
+    # 2. Iniciar
+    if device["use_docker"]:
+        print("🐳 Iniciando con Docker...")
+        subprocess.run(["docker", "compose", "-f", str(AGENT_DIR / "docker-compose.yml"), "up", "-d", "--build"])
+    else:
+        print("🔧 Iniciando con Systemd...")
+        subprocess.run(["bash", str(AGENT_DIR / "install_service.sh")], cwd=AGENT_DIR)
+
 def main():
     parser = argparse.ArgumentParser(description="SIMS Fleet Manager")
-    parser.add_argument("action", choices=["deploy", "status", "update-keys", "reboot"], help="Acción a realizar")
+    parser.add_argument("action", choices=["deploy", "status", "update-keys", "reboot", "auto-deploy"], help="Acción a realizar")
     parser.add_argument("--inventory", default=DEFAULT_INVENTORY, help="Archivo de inventario JSON")
     parser.add_argument("--id", help="Filtrar por ID de dispositivo específico")
     
     args = parser.parse_args()
+
+    if args.action == "auto-deploy":
+        auto_deploy_local()
+        return
 
     if not os.path.exists(args.inventory):
         # Crear inventario de ejemplo si no existe
