@@ -1,0 +1,10 @@
+[
+    {
+        "id": "AUTO-001",
+        "ip": "192.168.1.100",
+        "user": "pi",
+        "tenant_id": "feetly",
+        "api_key": "NUEVA_KEY_SEGURA",
+        "use_docker": true
+    }
+]
