@@ -57,16 +57,6 @@ jobs:
           docker buildx build --platform linux/amd64 -t sims-iot-server:latest-amd64 --load ./server
           docker save -o sims-iot-server-amd64.tar sims-iot-server:latest-amd64
 
-      - name: Build and Pack IoT Server (ARM64 - Apple Silicon M1/M2/M3)
-        run: |
-          docker buildx build --platform linux/arm64 -t sims-iot-server:latest-arm64 --load ./server
-          docker save -o sims-iot-server-arm64.tar sims-iot-server:latest-arm64
-
-      - name: Build and Pack IoT Agent (ARM64 - Raspberry Pi)
-        run: |
-          docker buildx build --platform linux/arm64 -t sims-iot-agent:latest-arm64 --load ./agent
-          docker save -o sims-iot-agent-arm64.tar sims-iot-agent:latest-arm64
-
       - name: Create or Update Latest Release
         uses: softprops/action-gh-release@v2
         with:
@@ -74,7 +64,5 @@ jobs:
           name: Latest Production Build
           files: |
             sims-iot-server-amd64.tar
-            sims-iot-server-arm64.tar
-            sims-iot-agent-arm64.tar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
