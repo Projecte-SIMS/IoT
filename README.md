@@ -29,9 +29,9 @@ Para probar el flujo completo sin hardware real:
 2. Inicie el agente simulado: `cd agent && ./run_agent_auto.sh local`
 
 ## 📄 Documentación Técnica
+- [**Manual IoT Centralizado**](https://github.com/Projecte-SIMS/.github/blob/main/profile/docs/iot.md)
 - [**Estado del Subsistema IoT**](./docs/ESTADO_SUBSISTEMA_IOT.md)
 - [**Guía de Instalación del Agente**](./docs/README_AGENT.md)
-- [**Manual IoT Centralizado**](../docs/iot.md)
 
 ---
-*Para más detalles, consulta el [README principal](../README.md).*
+*Para más detalles, consulta el [README principal](https://github.com/Projecte-SIMS/.github/blob/main/profile/readme.md).*
