@@ -41,6 +41,10 @@ LED_GREEN_PIN = 21   # Estado: En Marcha
 # Inicialización de Hardware
 hw = {}
 
+# GPS Inicial (Evitar 0,0 en el mar si no se especifica)
+INITIAL_LAT = float(os.getenv("INITIAL_LAT", 41.3851)) # Barcelona default
+INITIAL_LON = float(os.getenv("INITIAL_LON", 2.1734))
+
 class MockHW:
     def on(self): pass
     def off(self): pass
@@ -63,7 +67,7 @@ if not HARDWARE_AVAILABLE:
     hw["led_green"] = MockHW()
 
 vehicle_stats = {
-    "gps": {"lat": 0.0, "lon": 0.0, "alt": 0.0, "speed": 0.0},
+    "gps": {"lat": INITIAL_LAT, "lon": INITIAL_LON, "alt": 0.0, "speed": 0.0},
     "engine": {"temp": 20.0, "rpm": 0},
     "battery": 12.6
 }
