@@ -139,7 +139,7 @@ async def handle_messages(ws):
 
 async def run():
     # Use token in query param for WebSocket handshake
-    # wss://iot-server.com/ws/feetly/AUTO-001?token=...
+    # wss://iot-server.com/ws/fleetly/AUTO-001?token=...
     uri = f"{SERVER_WS}/ws/{TENANT_ID}/{DEVICE_ID}?token={IOT_API_KEY}"
     while True:
         try:

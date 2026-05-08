@@ -143,9 +143,9 @@ def main():
                 "id": "AUTO-001",
                 "ip": "192.168.1.100",
                 "user": "pi",
-                "tenant_id": "feetly",
+                "tenant_id": "fleetly",
                 "api_key": "NUEVA_KEY_SEGURA",
-                "use_docker": True
+                "use_docker": true
             }
         ]
         with open(args.inventory, "w") as f:
