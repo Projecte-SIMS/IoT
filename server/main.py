@@ -3,7 +3,7 @@ import json
 import asyncio
 import logging
 from typing import Dict, Any, List
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, Header
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, Header, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -311,8 +311,16 @@ async def send_command(tenant_id: str, cmd: CommandCreate, token: str = Header(N
     return {"result": "queued"}
 
 # WebSocket for agents
+@app.get("/ws/{tenant_id}/{hardware_id}")
+async def device_ws_get(tenant_id: str, hardware_id: str):
+    return {
+        "error": "Websocket connection required", 
+        "message": "If you are seeing this, your proxy might not be forwarding Websocket Upgrade headers. Enable 'Websockets Support' in Nginx Proxy Manager.",
+        "path": f"/ws/{tenant_id}/{hardware_id}"
+    }
+
 @app.websocket("/ws/{tenant_id}/{hardware_id}")
-async def device_ws(websocket: WebSocket, tenant_id: str, hardware_id: str, token: str = None):
+async def device_ws(websocket: WebSocket, tenant_id: str, hardware_id: str, token: str = Query(None)):
     # Verify token
     if token != API_KEY:
         await websocket.close(code=1008, reason="Invalid API Key")
