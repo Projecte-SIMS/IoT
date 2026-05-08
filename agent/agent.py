@@ -5,6 +5,7 @@ import asyncio
 import logging
 import uuid
 import random
+import ssl
 
 # Intentar importar librerías de hardware
 try:
@@ -35,6 +36,7 @@ TENANT_ID = os.getenv("TENANT_ID", "default")
 SERVER_WS = os.getenv("SERVER_WS")
 IOT_API_KEY = os.getenv("DEVICE_TOKEN") or os.getenv("IOT_API_KEY", "MACMECMIC")
 RELAY_PIN = int(os.getenv("RELAY0_PIN", 17))
+IGNORE_SSL = os.getenv("IOT_IGNORE_SSL", "false").lower() == "true"
 LED_YELLOW_PIN = 20  # Estado: Reservado
 LED_GREEN_PIN = 21   # Estado: En Marcha
 
@@ -141,11 +143,26 @@ async def run():
     # Use token in query param for WebSocket handshake
     # wss://iot-server.com/ws/fleetly/AUTO-001?token=...
     uri = f"{SERVER_WS}/ws/{TENANT_ID}/{DEVICE_ID}?token={IOT_API_KEY}"
+    
+    # Configuración de contexto SSL para ignorar errores de certificado si es necesario
+    ssl_context = None
+    if uri.startswith("wss"):
+        ssl_context = ssl.create_default_context()
+        if IGNORE_SSL:
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            logging.warning("⚠️ Verificación SSL DESACTIVADA (IOT_IGNORE_SSL=true)")
+
     while True:
         try:
             logging.info(f"🔄 Conectando a {SERVER_WS}/ws/{TENANT_ID}/{DEVICE_ID}...")
             async with websockets.connect(
-                uri, ping_interval=20, ping_timeout=10, open_timeout=15, compression=None
+                uri, 
+                ping_interval=20, 
+                ping_timeout=10, 
+                open_timeout=15, 
+                compression=None,
+                ssl=ssl_context
             ) as ws:
                 logging.info("✅ CONECTADO")
                 tasks = [
